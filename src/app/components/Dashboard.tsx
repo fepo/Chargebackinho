@@ -66,26 +66,36 @@ export default function Dashboard({ onSelectChargeback }: DashboardProps) {
     loading: false,
   });
 
-  // Carrega contestações
+  // Carrega contestações (webhook store + API Pagar.me, sem duplicatas)
   const loadChargebacks = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/pagarme/list-chargebacks");
-      if (res.ok) {
-        const data = await res.json();
-        setChargebacks(data);
+      const results = await Promise.allSettled([
+        fetch("/api/pagarme/chargebacks").then(r => r.ok ? r.json() : []),
+        fetch("/api/pagarme/list-chargebacks").then(r => r.ok ? r.json() : []),
+      ]);
 
-        // Calcula estatísticas
-        const total = data.length;
-        const totalAmount = data.reduce((sum: number, cb: Chargeback) => sum + cb.amount, 0);
-        const byReason: Record<string, number> = {};
-        data.forEach((cb: Chargeback) => {
-          byReason[cb.reason] = (byReason[cb.reason] || 0) + 1;
-        });
+      const webhookData: Chargeback[] = results[0].status === "fulfilled" ? results[0].value : [];
+      const apiData: Chargeback[] = results[1].status === "fulfilled" ? results[1].value : [];
 
-        setStats({ total, totalAmount, byReason });
-        setLastUpdate(new Date().toLocaleTimeString("pt-BR"));
-      }
+      // Merge sem duplicatas (webhook tem prioridade)
+      const seen = new Set(webhookData.map((c) => c.id));
+      const merged = [
+        ...webhookData,
+        ...apiData.filter((c) => !seen.has(c.id)),
+      ];
+
+      setChargebacks(merged);
+
+      const total = merged.length;
+      const totalAmount = merged.reduce((sum: number, cb: Chargeback) => sum + cb.amount, 0);
+      const byReason: Record<string, number> = {};
+      merged.forEach((cb: Chargeback) => {
+        byReason[cb.reason] = (byReason[cb.reason] || 0) + 1;
+      });
+
+      setStats({ total, totalAmount, byReason });
+      setLastUpdate(new Date().toLocaleTimeString("pt-BR"));
     } catch (error) {
       console.error("Erro ao carregar contestações:", error);
     }
@@ -277,7 +287,7 @@ export default function Dashboard({ onSelectChargeback }: DashboardProps) {
           <p className="text-xs text-gray-400 mt-2 truncate">
             {Object.entries(stats.byReason).sort(([, a], [, b]) => b - a)[0]?.[0]
               ? REASON_LABELS[Object.entries(stats.byReason).sort(([, a], [, b]) => b - a)[0][0]] ||
-                Object.entries(stats.byReason).sort(([, a], [, b]) => b - a)[0][0]
+              Object.entries(stats.byReason).sort(([, a], [, b]) => b - a)[0][0]
               : "N/A"}
           </p>
         </div>
@@ -288,9 +298,8 @@ export default function Dashboard({ onSelectChargeback }: DashboardProps) {
           </p>
           <div className="flex items-center gap-2 mt-2">
             <div
-              className={`w-2 h-2 rounded-full ${
-                autoRefresh ? "bg-green-500 animate-pulse" : "bg-gray-300"
-              }`}
+              className={`w-2 h-2 rounded-full ${autoRefresh ? "bg-green-500 animate-pulse" : "bg-gray-300"
+                }`}
             />
             <p className="text-xs text-gray-400">
               {autoRefresh ? "Auto-refresh ativo" : "Auto-refresh desativo"}
@@ -325,11 +334,10 @@ export default function Dashboard({ onSelectChargeback }: DashboardProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                autoRefresh
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${autoRefresh
                   ? "bg-green-100 text-green-700 hover:bg-green-200"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+                }`}
             >
               {autoRefresh ? "🔄 Auto" : "⏸ Manual"}
             </button>
@@ -370,15 +378,14 @@ export default function Dashboard({ onSelectChargeback }: DashboardProps) {
                         {cb.customerName}
                       </p>
                       <span
-                        className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${
-                          cb.status === "opened"
+                        className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${cb.status === "opened"
                             ? "bg-red-100 text-red-700"
                             : cb.status === "submitted"
                               ? "bg-yellow-100 text-yellow-700"
                               : cb.status === "won"
                                 ? "bg-green-100 text-green-700"
                                 : "bg-gray-100 text-gray-700"
-                        }`}
+                          }`}
                       >
                         {cb.status === "opened"
                           ? "Aberto"
