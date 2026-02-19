@@ -46,13 +46,12 @@ export async function POST(request: Request) {
       try {
         const pagarme = new PagarmeAPI(process.env.PAGARME_API_KEY || "");
 
-        // Submete resposta de chargeback
-        submitResult = await pagarme.submitChargebackResponse(
+        // Submete defesa de chargeback (converte texto para Buffer)
+        const evidenceBuffer = Buffer.from(body.dossieMD, "utf-8");
+        submitResult = await pagarme.submitChargebackDefense(
           body.chargebackId,
-          {
-            description: body.dossieMD,
-            evidence: body.parecer || "Veja documentação anexa",
-          }
+          evidenceBuffer,
+          "document"
         );
 
         console.log(

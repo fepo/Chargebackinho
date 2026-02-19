@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+
 
 interface DossieViewerProps {
   markdown: string;
@@ -67,20 +67,20 @@ export function DossieViewer({ markdown, title }: DossieViewerProps) {
           </head>
           <body>
             ${markdown
-              .split("\n")
-              .map((line) => {
-                if (line.startsWith("# "))
-                  return `<h1>${line.substring(2)}</h1>`;
-                if (line.startsWith("## "))
-                  return `<h2>${line.substring(3)}</h2>`;
-                if (line.startsWith("### "))
-                  return `<h3>${line.substring(4)}</h3>`;
-                if (line.startsWith("- "))
-                  return `<li>${line.substring(2)}</li>`;
-                if (line.trim() === "") return "<br>";
-                return `<p>${line}</p>`;
-              })
-              .join("\n")}
+          .split("\n")
+          .map((line) => {
+            if (line.startsWith("# "))
+              return `<h1>${line.substring(2)}</h1>`;
+            if (line.startsWith("## "))
+              return `<h2>${line.substring(3)}</h2>`;
+            if (line.startsWith("### "))
+              return `<h3>${line.substring(4)}</h3>`;
+            if (line.startsWith("- "))
+              return `<li>${line.substring(2)}</li>`;
+            if (line.trim() === "") return "<br>";
+            return `<p>${line}</p>`;
+          })
+          .join("\n")}
           </body>
         </html>
       `);
@@ -105,23 +105,21 @@ export function DossieViewer({ markdown, title }: DossieViewerProps) {
         <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
           <button
             onClick={() => setViewMode("formatted")}
-            className={`px-3 py-1 rounded transition-colors ${
-              viewMode === "formatted"
+            className={`px-3 py-1 rounded transition-colors ${viewMode === "formatted"
                 ? "bg-white text-brand-600 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
-            }`}
+              }`}
           >
             👁️ Formatado
           </button>
           <button
             onClick={() => setViewMode("raw")}
-            className={`px-3 py-1 rounded transition-colors ${
-              viewMode === "raw"
+            className={`px-3 py-1 rounded transition-colors ${viewMode === "raw"
                 ? "bg-white text-brand-600 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
-            }`}
+              }`}
           >
-            </> Raw
+            {"</> Raw"}
           </button>
         </div>
 
@@ -192,51 +190,14 @@ export function DossieViewer({ markdown, title }: DossieViewerProps) {
       {/* Viewer */}
       {viewMode === "formatted" ? (
         <div className="prose prose-sm max-w-none bg-gray-50 p-6 rounded-lg border border-gray-200 max-h-96 overflow-y-auto">
-          <ReactMarkdown
-            components={{
-              h1: ({ children }) => (
-                <h1 className="text-2xl font-bold text-gray-900 mb-4 border-b-2 border-gray-300 pb-2">
-                  {children}
-                </h1>
-              ),
-              h2: ({ children }) => (
-                <h2 className="text-xl font-bold text-gray-900 mt-6 mb-3">
-                  {children}
-                </h2>
-              ),
-              h3: ({ children }) => (
-                <h3 className="text-lg font-semibold text-gray-900 mt-4 mb-2">
-                  {children}
-                </h3>
-              ),
-              p: ({ children }) => <p className="text-gray-700 mb-3">{children}</p>,
-              ul: ({ children }) => (
-                <ul className="list-disc list-inside text-gray-700 mb-3 space-y-1">
-                  {children}
-                </ul>
-              ),
-              ol: ({ children }) => (
-                <ol className="list-decimal list-inside text-gray-700 mb-3 space-y-1">
-                  {children}
-                </ol>
-              ),
-              li: ({ children }) => <li>{children}</li>,
-              strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-              em: ({ children }) => <em className="italic">{children}</em>,
-              code: ({ children }) => (
-                <code className="bg-gray-200 px-2 py-1 rounded text-sm font-mono text-gray-800">
-                  {children}
-                </code>
-              ),
-              blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3">
-                  {children}
-                </blockquote>
-              ),
-            }}
-          >
-            {markdown}
-          </ReactMarkdown>
+          {markdown.split("\n").map((line, i) => {
+            if (line.startsWith("# ")) return <h1 key={i} className="text-2xl font-bold text-gray-900 mb-4 border-b-2 border-gray-300 pb-2">{line.slice(2)}</h1>;
+            if (line.startsWith("## ")) return <h2 key={i} className="text-xl font-bold text-gray-900 mt-6 mb-3">{line.slice(3)}</h2>;
+            if (line.startsWith("### ")) return <h3 key={i} className="text-lg font-semibold text-gray-900 mt-4 mb-2">{line.slice(4)}</h3>;
+            if (line.startsWith("- ")) return <li key={i} className="text-gray-700 ml-4 list-disc">{line.slice(2)}</li>;
+            if (line.trim() === "") return <br key={i} />;
+            return <p key={i} className="text-gray-700 mb-2">{line}</p>;
+          })}
         </div>
       ) : (
         <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 max-h-96 overflow-y-auto">

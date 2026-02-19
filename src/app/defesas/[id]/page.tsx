@@ -43,9 +43,9 @@ export default function DefesaPage() {
   // ── Carregar defesa ────────────────────────────────
   useEffect(() => {
     if (typeof id === "string") {
-      const rascunho = obterRascunho(id);
+      const rascunho = obterRascunho(id) as Defesa | null;
       if (rascunho && rascunho.formulario._defesaMeta) {
-        setDefesa(rascunho as Defesa);
+        setDefesa(rascunho);
       }
       setMounted(true);
       setLoading(false);
@@ -177,13 +177,12 @@ export default function DefesaPage() {
               <div className="flex items-center gap-2">
                 <div className="flex-1 bg-gray-200 rounded-full h-2">
                   <div
-                    className={`h-2 rounded-full transition-all ${
-                      parecer.viabilidade >= 0.75
+                    className={`h-2 rounded-full transition-all ${parecer.viabilidade >= 0.75
                         ? "bg-green-500"
                         : parecer.viabilidade >= 0.5
                           ? "bg-yellow-500"
                           : "bg-red-500"
-                    }`}
+                      }`}
                     style={{ width: `${parecer.viabilidade * 100}%` }}
                   />
                 </div>
@@ -212,13 +211,12 @@ export default function DefesaPage() {
 
           {/* Recomendação */}
           <div
-            className={`p-4 rounded-lg font-medium text-lg ${
-              parecer.recomendacao === "responder"
+            className={`p-4 rounded-lg font-medium text-lg ${parecer.recomendacao === "responder"
                 ? "bg-green-50 text-green-900 border border-green-200"
                 : parecer.recomendacao === "nao_responder"
                   ? "bg-red-50 text-red-900 border border-red-200"
                   : "bg-yellow-50 text-yellow-900 border border-yellow-200"
-            }`}
+              }`}
           >
             {parecer.recomendacao === "responder"
               ? "✓ RECOMENDADO RESPONDER"

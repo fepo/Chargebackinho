@@ -5,24 +5,28 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { listarRascunhos, obterRascunho, type Rascunho } from "@/lib/storage";
 
+import type { FormContestacao } from "@/types";
+
 interface Defesa extends Rascunho {
-  _defesaMeta?: {
-    chargebackId: string;
-    dossieTitulo: string;
-    dossieMD: string;
-    parecer?: {
-      tipo: string;
-      viabilidade: number;
-      parecer: string;
-      argumentos: string[];
-      recomendacao: "responder" | "nao_responder" | "acompanhar";
-      confianca: number;
+  formulario: FormContestacao & {
+    _defesaMeta?: {
+      chargebackId: string;
+      dossieTitulo: string;
+      dossieMD: string;
+      parecer?: {
+        tipo: string;
+        viabilidade: number;
+        parecer: string;
+        argumentos: string[];
+        recomendacao: "responder" | "nao_responder" | "acompanhar";
+        confianca: number;
+      };
+      shopifyData?: any;
+      source: "n8n" | "manual";
+      status: "drafted" | "submitted" | "won" | "lost";
+      geradoEm: string;
+      aprovarEm?: string;
     };
-    shopifyData?: any;
-    source: "n8n" | "manual";
-    status: "drafted" | "submitted" | "won" | "lost";
-    geradoEm: string;
-    aprovarEm?: string;
   };
 }
 
@@ -37,8 +41,9 @@ export default function DefesasPage() {
   useEffect(() => {
     const allRascunhos = listarRascunhos();
     const defesasList = allRascunhos.filter(
-      (r) => r.formulario._defesaMeta !== undefined
+      (r) => (r.formulario as any)._defesaMeta !== undefined
     ) as Defesa[];
+
 
     setDefesas(defesasList);
     setMounted(true);
@@ -161,31 +166,28 @@ export default function DefesasPage() {
       <div className="flex gap-2">
         <button
           onClick={() => setFilter("all")}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            filter === "all"
-              ? "bg-brand-500 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === "all"
+            ? "bg-brand-500 text-white"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
         >
           Todas ({defesas.length})
         </button>
         <button
           onClick={() => setFilter("n8n")}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            filter === "n8n"
-              ? "bg-purple-500 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === "n8n"
+            ? "bg-purple-500 text-white"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
         >
           🤖 Automáticas ({defesas.filter((d) => d.formulario._defesaMeta?.source === "n8n").length})
         </button>
         <button
           onClick={() => setFilter("manual")}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            filter === "manual"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === "manual"
+            ? "bg-blue-500 text-white"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
         >
           ✋ Manuais ({defesas.filter((d) => d.formulario._defesaMeta?.source === "manual").length})
         </button>
@@ -247,13 +249,12 @@ export default function DefesasPage() {
                         </div>
                       </div>
                       <div
-                        className={`px-3 py-2 rounded text-sm font-medium ${
-                          parecer.recomendacao === "responder"
-                            ? "bg-green-50 text-green-800 border border-green-200"
-                            : parecer.recomendacao === "nao_responder"
-                              ? "bg-red-50 text-red-800 border border-red-200"
-                              : "bg-yellow-50 text-yellow-800 border border-yellow-200"
-                        }`}
+                        className={`px-3 py-2 rounded text-sm font-medium ${parecer.recomendacao === "responder"
+                          ? "bg-green-50 text-green-800 border border-green-200"
+                          : parecer.recomendacao === "nao_responder"
+                            ? "bg-red-50 text-red-800 border border-red-200"
+                            : "bg-yellow-50 text-yellow-800 border border-yellow-200"
+                          }`}
                       >
                         Recomendação:{" "}
                         {parecer.recomendacao === "responder"
