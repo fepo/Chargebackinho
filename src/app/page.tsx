@@ -90,14 +90,27 @@ export default function HomePage() {
 
   // ── Seleciona contestação do dashboard ────────────────────────────────────
   const handleSelectChargeback = (chargeback: any) => {
-    setForm((f) => ({
-      ...f,
-      contestacaoId: chargeback.id,
-      numeroPedido: chargeback.orderId || chargeback.chargeId,
-      nomeCliente: chargeback.customerName,
-      emailCliente: chargeback.customerEmail,
-      valorTransacao: chargeback.amount.toString(),
-    }));
+    // Se veio do webhook, tem rascunho completo pré-preenchido
+    if (chargeback.rascunho) {
+      setForm({ ...emptyForm, ...chargeback.rascunho });
+    } else {
+      setForm((f) => ({
+        ...f,
+        contestacaoId: chargeback.id,
+        dataContestacao: chargeback.createdAt?.split("T")[0] || "",
+        numeroPedido: chargeback.orderId || chargeback.chargeId || "",
+        nomeCliente: chargeback.customerName || "",
+        emailCliente: chargeback.customerEmail || "",
+        valorTransacao: String(chargeback.amount || ""),
+        tipoContestacao: "desacordo_comercial",
+      }));
+    }
+    setShowDashboard(false);
+    setStep(0);
+  };
+
+  const handleNewManual = () => {
+    setForm(emptyForm);
     setShowDashboard(false);
     setStep(0);
   };
@@ -668,233 +681,225 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      {/* Dashboard de Contestações */}
+      {/* ── DASHBOARD (tela principal) ── */}
       {showDashboard && (
-        <div>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900">
-              📊 Dashboard de Contestações
-            </h2>
-            <button
-              type="button"
-              onClick={() => setShowDashboard(false)}
-              className="text-sm text-gray-600 hover:text-gray-900 font-medium"
-            >
-              Ocultar
-            </button>
-          </div>
-          <Dashboard onSelectChargeback={handleSelectChargeback} />
-        </div>
+        <Dashboard
+          onSelectChargeback={handleSelectChargeback}
+          onNewManual={handleNewManual}
+        />
       )}
 
-      {/* Botão para mostrar dashboard */}
+      {/* ── FORMULÁRIO (tela secundária) ── */}
       {!showDashboard && (
-        <button
-          type="button"
-          onClick={() => setShowDashboard(true)}
-          className="mb-4 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-medium transition-colors"
-        >
-          📊 Ver Dashboard
-        </button>
-      )}
-
-      {/* Formulário */}
-      <div className="max-w-2xl mx-auto">
-        {/* Auto-save badge */}
-        {autoSaveTime && (
-          <div className="mb-4 flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
-            <span>
-              ✓ Rascunho salvo às{" "}
-              <span className="font-medium">{autoSaveTime}</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowRascunhos(true)}
-              className="text-green-600 hover:text-green-700 font-medium underline"
-            >
-              Ver rascunhos
-            </button>
-          </div>
-        )}
-
-        {/* Modal de rascunhos */}
-        {showRascunhos && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto shadow-xl">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    Rascunhos Salvos
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowRascunhos(false)}
-                    className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                {rascunhos.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">
-                    Nenhum rascunho salvo ainda.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {rascunhos.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
-                      >
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-800">{r.titulo}</p>
-                          <p className="text-sm text-gray-500">
-                            {formatarDataRascunho(r.data)} • ~
-                            {r.gastoTokensEstimado} tokens
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => retomarRascunho(r.id)}
-                            className="btn-secondary text-sm px-3 py-1"
-                          >
-                            Retomar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => duplicarRascunhoLocal(r.id)}
-                            className="btn-secondary text-sm px-3 py-1"
-                          >
-                            Duplicar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deletarRascunhoLocal(r.id)}
-                            className="text-red-600 hover:text-red-700 text-sm font-medium px-2"
-                          >
-                            Deletar
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Progress bar */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            {STEPS.map((s, i) => (
-              <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                <button
-                  type="button"
-                  onClick={() => i < step && setStep(i)}
-                  className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${
-                    i === step
-                      ? "bg-brand-500 text-white"
-                      : i < step
-                        ? "bg-brand-100 text-brand-600 cursor-pointer hover:bg-brand-200"
-                        : "bg-gray-100 text-gray-400 cursor-default"
-                  }`}
-                >
-                  {i < step ? "✓" : i + 1}
-                </button>
-                <span
-                  className={`text-xs hidden sm:block ${
-                    i === step ? "text-brand-600 font-medium" : "text-gray-400"
-                  }`}
-                >
-                  {s}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="h-1 bg-gray-100 rounded-full mt-1">
-            <div
-              className="h-1 bg-brand-500 rounded-full transition-all duration-300"
-              style={{ width: `${(step / (STEPS.length - 1)) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Card */}
-        <div className="card p-6 mb-6">{renderStep()}</div>
-
-        {/* Navigation */}
-        <div className="flex justify-between">
+        <div>
           <button
             type="button"
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-            disabled={step === 0}
-            className="btn-secondary disabled:opacity-30"
+            onClick={() => setShowDashboard(true)}
+            className="mb-6 flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 font-medium transition-colors"
           >
-            ← Anterior
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Voltar ao Dashboard
           </button>
 
-          {step < STEPS.length - 1 ? (
-            <button
-              type="button"
-              onClick={() => setStep((s) => s + 1)}
-              className="btn-primary"
-            >
-              Próximo →
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading}
-              className="btn-primary flex items-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <svg
-                    className="animate-spin w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8H4z"
-                    />
-                  </svg>
-                  Iniciando...
-                </>
+          {/* Formulário */}
+          <div className="max-w-2xl mx-auto">
+            {/* Auto-save badge */}
+            {autoSaveTime && (
+              <div className="mb-4 flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+                <span>
+                  ✓ Rascunho salvo às{" "}
+                  <span className="font-medium">{autoSaveTime}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowRascunhos(true)}
+                  className="text-green-600 hover:text-green-700 font-medium underline"
+                >
+                  Ver rascunhos
+                </button>
+              </div>
+            )}
+
+            {/* Modal de rascunhos */}
+            {showRascunhos && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto shadow-xl">
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        Rascunhos Salvos
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowRascunhos(false)}
+                        className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    {rascunhos.length === 0 ? (
+                      <p className="text-gray-500 text-center py-8">
+                        Nenhum rascunho salvo ainda.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {rascunhos.map((r) => (
+                          <div
+                            key={r.id}
+                            className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-800">{r.titulo}</p>
+                              <p className="text-sm text-gray-500">
+                                {formatarDataRascunho(r.data)} • ~
+                                {r.gastoTokensEstimado} tokens
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => retomarRascunho(r.id)}
+                                className="btn-secondary text-sm px-3 py-1"
+                              >
+                                Retomar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => duplicarRascunhoLocal(r.id)}
+                                className="btn-secondary text-sm px-3 py-1"
+                              >
+                                Duplicar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deletarRascunhoLocal(r.id)}
+                                className="text-red-600 hover:text-red-700 text-sm font-medium px-2"
+                              >
+                                Deletar
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Progress bar */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-2">
+                {STEPS.map((s, i) => (
+                  <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => i < step && setStep(i)}
+                      className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${i === step
+                        ? "bg-brand-500 text-white"
+                        : i < step
+                          ? "bg-brand-100 text-brand-600 cursor-pointer hover:bg-brand-200"
+                          : "bg-gray-100 text-gray-400 cursor-default"
+                        }`}
+                    >
+                      {i < step ? "✓" : i + 1}
+                    </button>
+                    <span
+                      className={`text-xs hidden sm:block ${i === step ? "text-brand-600 font-medium" : "text-gray-400"
+                        }`}
+                    >
+                      {s}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="h-1 bg-gray-100 rounded-full mt-1">
+                <div
+                  className="h-1 bg-brand-500 rounded-full transition-all duration-300"
+                  style={{ width: `${(step / (STEPS.length - 1)) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Card */}
+            <div className="card p-6 mb-6">{renderStep()}</div>
+
+            {/* Navigation */}
+            <div className="flex justify-between">
+              <button
+                type="button"
+                onClick={() => setStep((s) => Math.max(0, s - 1))}
+                disabled={step === 0}
+                className="btn-secondary disabled:opacity-30"
+              >
+                ← Anterior
+              </button>
+
+              {step < STEPS.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setStep((s) => s + 1)}
+                  className="btn-primary"
+                >
+                  Próximo →
+                </button>
               ) : (
-                <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
-                  Gerar Contestação com IA
-                </>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <svg
+                        className="animate-spin w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8H4z"
+                        />
+                      </svg>
+                      Iniciando...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 10V3L4 14h7v7l9-11h-7z"
+                        />
+                      </svg>
+                      Gerar Contestação com IA
+                    </>
+                  )}
+                </button>
               )}
-            </button>
-          )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
