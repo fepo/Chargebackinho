@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(CLAUDECODE= claude mcp list)",
+      "Bash(cmd /c \"set CLAUDECODE=& claude mcp list\")",
+      "Bash(where:*)",
+      "Bash(cmd /c \"set CLAUDECODE=& C:\\\\Users\\\\felip\\\\AppData\\\\Roaming\\\\npm\\\\claude.cmd mcp list\")",
+      "Bash(unset:*)",
+      "Bash(claude mcp:*)",
+      "Bash(echo:*)",
+      "Bash(npx:*)",
+      "Bash(npx -y @modelcontextprotocol/server-filesystem --version)",
+      "Bash(claude doctor:*)",
+      "mcp__filesystem__list_directory",
+      "Bash(code:*)",
+      "Bash(start index.html)",
+      "Skill(claude-developer-platform)",
+      "Bash(npm install:*)",
+      "Bash(node:*)",
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__create_directory",
+      "mcp__filesystem__write_file",
+      "Bash(npm run dev:*)",
+      "Bash(pkill:*)"
+    ]
+  }
+}
