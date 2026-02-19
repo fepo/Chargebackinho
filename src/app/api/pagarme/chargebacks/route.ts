@@ -2,20 +2,50 @@ import { PagarmeAPI } from "@/lib/pagarme";
 import type { FormContestacao } from "@/types";
 import crypto from "crypto";
 
-/**
- * POST /api/pagarme/chargebacks
- * Webhook receiver para notificações de chargebacks da Pagar.me
- * - Valida assinatura HMAC SHA-256
- * - Armazena chargeback server-side (sem localStorage)
- * - Retorna 200 SEMPRE (Pagar.me reenvia em loop se não receber 200)
- */
+// ─── Blob helpers ─────────────────────────────────────────────────────────────
+// Usa @vercel/blob para persistência entre serverless instances no Vercel.
+// Fallback gracioso se BLOB_READ_WRITE_TOKEN não estiver configurado.
+
+const BLOB_KEY = "chargebacks-store.json";
+
+async function readStore(): Promise<any[]> {
+  try {
+    const { list } = await import("@vercel/blob");
+    const { blobs } = await list({ prefix: BLOB_KEY });
+    if (!blobs.length) return [];
+    const res = await fetch(blobs[0].url);
+    return await res.json();
+  } catch {
+    // Fallback: memória global
+    const g = globalThis as any;
+    return g._cbstore ?? [];
+  }
+}
+
+async function writeStore(data: any[]) {
+  try {
+    const { put } = await import("@vercel/blob");
+    await put(BLOB_KEY, JSON.stringify(data), {
+      access: "public",
+      contentType: "application/json",
+      allowOverwrite: true,
+    });
+  } catch {
+    // Fallback: memória global
+    const g = globalThis as any;
+    g._cbstore = data;
+  }
+}
+
+// ─── POST /api/pagarme/chargebacks ──────────────────────────────────────────
+// Recebe webhook do Pagar.me, valida assinatura e persiste o chargeback.
+
 export async function POST(req: Request) {
   try {
     const signature = req.headers.get("x-pagar-me-signature");
     const webhookSecret = process.env.PAGARME_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-      console.error("PAGARME_WEBHOOK_SECRET não configurado");
       return new Response("Webhook secret not configured", { status: 500 });
     }
 
@@ -25,76 +55,67 @@ export async function POST(req: Request) {
 
     const bodyText = await req.text();
 
-    // Valida assinatura HMAC SHA-256
-    const expectedSignature = crypto
+    // Valida HMAC SHA-256
+    const expected = crypto
       .createHmac("sha256", webhookSecret)
       .update(bodyText)
       .digest("hex");
 
-    if (signature !== expectedSignature) {
+    if (signature !== expected) {
       console.warn("Assinatura de webhook inválida");
       return new Response("Invalid signature", { status: 401 });
     }
 
     const payload = JSON.parse(bodyText);
 
-    // Ignora eventos que não são de chargeback
+    // Ignora eventos que não são de chargeback (retorna 200 para não reenviar)
     if (
       payload.type !== "charge.chargebacked" &&
       payload.type !== "chargeback.created"
     ) {
-      return new Response(JSON.stringify({ received: true, ignored: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.json({ received: true, ignored: true });
     }
 
-    const chargebackData = payload.data;
-    const chargeId = chargebackData.charge_id || chargebackData.id;
-    const orderId = chargebackData.order_id;
-    const amount = chargebackData.amount || 0;
-    const reason = chargebackData.reason || "Chargeback";
+    const d = payload.data;
+    const chargeId = d.charge_id || d.id;
+    const orderId = d.order_id;
+    const amount = d.amount || 0;
+    const reason = d.reason || "Chargeback";
 
-    // Busca dados complementares via API (opcional)
+    // Enriquece com dados da API (opcional — só se PAGARME_API_KEY configurado)
     let orderData: any = null;
     let chargeData: any = null;
-
     const apiKey = process.env.PAGARME_API_KEY;
     if (apiKey) {
       try {
         const pagarme = new PagarmeAPI(apiKey);
         if (orderId) orderData = await pagarme.getOrder(orderId);
         chargeData = await pagarme.getCharge(chargeId);
-      } catch (error) {
-        console.error("Erro ao buscar dados da Pagar.me:", error);
+      } catch (e) {
+        console.error("Erro ao enriquecer dados:", e);
       }
     }
 
-    // Monta FormContestacao pré-preenchido (SEM localStorage — server-side)
     const rascunho: FormContestacao = {
       gateway: "pagarme",
-      contestacaoId: chargebackData.id || `cb_${Date.now()}`,
+      contestacaoId: d.id || `cb_${Date.now()}`,
       dataContestacao: new Date().toISOString().split("T")[0],
-      tipoContestacao: inferirTipoContestacao(reason),
+      tipoContestacao: inferirTipo(reason),
       valorTransacao: (amount / 100).toFixed(2),
       bandeira: chargeData?.payment_method?.card?.brand || "",
       finalCartao: chargeData?.payment_method?.card?.last_four_digits || "",
-      dataTransacao:
-        chargeData?.created_at?.split("T")[0] ||
-        new Date().toISOString().split("T")[0],
-      numeroPedido: orderId || chargebackData.order_id || "",
+      dataTransacao: chargeData?.created_at?.split("T")[0] || new Date().toISOString().split("T")[0],
+      numeroPedido: orderId || "",
       itensPedido: orderData?.items?.map((item: any) => ({
         descricao: item.description || "Produto",
         valor: ((item.amount || 0) / 100).toFixed(2),
-      })) || [{ descricao: "Pedido Pagar.me", valor: (amount / 100).toFixed(2) }],
+      })) || [{ descricao: "Pedido", valor: (amount / 100).toFixed(2) }],
       codigoConfirmacao: chargeId,
-      nomeCliente:
-        orderData?.customer?.name || chargeData?.customer?.name || "",
+      nomeCliente: orderData?.customer?.name || chargeData?.customer?.name || "",
       cpfCliente: orderData?.customer?.documentNumber || "",
-      emailCliente:
-        orderData?.customer?.email || chargeData?.customer?.email || "",
-      enderecoEntrega: formatarEndereco(orderData?.shippingAddress),
-      enderecoFaturamento: formatarEndereco(orderData?.billingAddress),
+      emailCliente: orderData?.customer?.email || chargeData?.customer?.email || "",
+      enderecoEntrega: fmtEndereco(orderData?.shippingAddress),
+      enderecoFaturamento: fmtEndereco(orderData?.billingAddress),
       ipComprador: "",
       transportadora: "",
       codigoRastreio: chargeData?.metadata?.tracking_code || "",
@@ -121,95 +142,47 @@ export async function POST(req: Request) {
       rascunho,
     };
 
-    await saveChargebackToStore(record);
+    // Persiste no Blob Store
+    const existing = await readStore();
+    const updated = [
+      record,
+      ...existing.filter((c: any) => c.id !== record.id),
+    ].slice(0, 200);
+    await writeStore(updated);
 
-    console.log(
-      `✅ Chargeback recebido: ${record.id} | R$ ${rascunho.valorTransacao} | ${rascunho.nomeCliente}`
-    );
+    console.log(`✅ Chargeback ${record.id} — R$ ${rascunho.valorTransacao} — ${rascunho.nomeCliente}`);
 
-    return new Response(
-      JSON.stringify({
-        received: true,
-        chargebackId: record.id,
-        message: `Chargeback de R$ ${rascunho.valorTransacao} recebido`,
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
+    return Response.json({
+      received: true,
+      chargebackId: record.id,
+      message: `Chargeback de R$ ${rascunho.valorTransacao} salvo`,
+    });
   } catch (error) {
     console.error("Erro no webhook:", error);
-    // Sempre 200 para não entrar em loop de reenvio
-    return new Response(
-      JSON.stringify({ received: true, error: "Logged internally" }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
+    // Sempre 200 → evita loop de reenvio do Pagar.me
+    return Response.json({ received: true, error: "Logged internally" });
   }
 }
 
-/**
- * GET /api/pagarme/chargebacks
- * Retorna chargebacks recebidos via webhook
- */
+// ─── GET /api/pagarme/chargebacks ────────────────────────────────────────────
+// Retorna todos os chargebacks armazenados (para o Dashboard).
+
 export async function GET() {
-  const chargebacks = await loadChargebacksFromStore();
-  return new Response(JSON.stringify(chargebacks), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-// ─── Store server-side ────────────────────────────────────────────────────────
-// Usa memória global (warm Lambda) + /tmp (fallback entre cold starts)
-
-const g = globalThis as any;
-if (!g._cbstore) g._cbstore = [];
-
-async function saveChargebackToStore(record: any) {
-  g._cbstore = [
-    record,
-    ...g._cbstore.filter((c: any) => c.id !== record.id),
-  ].slice(0, 100);
-
-  try {
-    const { writeFile } = await import("fs/promises");
-    await writeFile("/tmp/_cbstore.json", JSON.stringify(g._cbstore));
-  } catch (_) {}
-}
-
-async function loadChargebacksFromStore(): Promise<any[]> {
-  if (g._cbstore.length === 0) {
-    try {
-      const { readFile } = await import("fs/promises");
-      const raw = await readFile("/tmp/_cbstore.json", "utf-8");
-      g._cbstore = JSON.parse(raw);
-    } catch (_) {}
-  }
-  return g._cbstore;
+  const chargebacks = await readStore();
+  return Response.json(chargebacks);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function inferirTipoContestacao(
-  reason: string
-): FormContestacao["tipoContestacao"] {
+function inferirTipo(reason: string): FormContestacao["tipoContestacao"] {
   const l = (reason || "").toLowerCase();
-  if (l.includes("não recebido") || l.includes("not received"))
-    return "produto_nao_recebido";
-  if (l.includes("fraude") || l.includes("fraud") || l.includes("unauthorized"))
-    return "fraude";
-  if (l.includes("crédito") || l.includes("credit") || l.includes("reembolso"))
-    return "credito_nao_processado";
+  if (l.includes("não recebido") || l.includes("not received")) return "produto_nao_recebido";
+  if (l.includes("fraude") || l.includes("fraud") || l.includes("unauthorized")) return "fraude";
+  if (l.includes("crédito") || l.includes("credit") || l.includes("reembolso")) return "credito_nao_processado";
   return "desacordo_comercial";
 }
 
-function formatarEndereco(endereco: any): string {
-  if (!endereco) return "";
-  return [
-    endereco.line1,
-    endereco.line2,
-    endereco.zipCode,
-    endereco.city,
-    endereco.state,
-  ]
-    .filter(Boolean)
-    .join(", ");
+function fmtEndereco(e: any): string {
+  if (!e) return "";
+  return [e.line1, e.line2, e.zipCode, e.city, e.state].filter(Boolean).join(", ");
 }
