@@ -89,13 +89,15 @@ export default function HomePage() {
   }, []);
 
   // ── Seleciona contestação do dashboard ────────────────────────────────────
-  const handleSelectChargeback = (chargeback: any) => {
+  const handleSelectChargeback = async (chargeback: any) => {
+    let initialForm = { ...emptyForm };
+
     // Se veio do webhook, tem rascunho completo pré-preenchido
     if (chargeback.rascunho) {
-      setForm({ ...emptyForm, ...chargeback.rascunho });
+      initialForm = { ...emptyForm, ...chargeback.rascunho };
     } else {
-      setForm((f) => ({
-        ...f,
+      initialForm = {
+        ...initialForm,
         contestacaoId: chargeback.id,
         dataContestacao: chargeback.createdAt?.split("T")[0] || "",
         numeroPedido: chargeback.orderId || chargeback.chargeId || "",
@@ -103,10 +105,50 @@ export default function HomePage() {
         emailCliente: chargeback.customerEmail || "",
         valorTransacao: String(chargeback.amount || ""),
         tipoContestacao: "desacordo_comercial",
-      }));
+      };
     }
+
+    setForm(initialForm);
     setShowDashboard(false);
     setStep(0);
+
+    // ── Enriquecimento Automático via Shopify ──
+    const searchOrder = chargeback.orderId || chargeback.rascunho?.numeroPedido;
+    if (searchOrder) {
+      console.log(`Buscando pedido ${searchOrder} na Shopify...`);
+      try {
+        const res = await fetch(`/api/shopify/get-order?orderName=${encodeURIComponent(searchOrder)}`);
+        const data = await res.json();
+
+        if (data.success && data.order) {
+          const s = data.order;
+          console.log("Pedido Shopify encontrado:", s.name);
+
+          // Pega o primeiro fulfillment que tiver rastreio
+          const fulfillment = s.fulfillments?.find((f: any) => f.trackingInfo?.number);
+
+          setForm((prev) => ({
+            ...prev,
+            // Preenche dados de logística se encontrados
+            transportadora: fulfillment?.trackingInfo?.company || prev.transportadora,
+            codigoRastreio: fulfillment?.trackingInfo?.number || prev.codigoRastreio,
+            // Se tiver itens na Shopify, substitui ou complementa
+            itensPedido: s.lineItems?.length > 0
+              ? s.lineItems.map((item: any) => ({
+                descricao: item.title,
+                valor: item.price,
+              }))
+              : prev.itensPedido,
+            // Atualiza endereço se disponível
+            enderecoEntrega: s.customer?.defaultAddress
+              ? `${s.customer.defaultAddress.address1}, ${s.customer.defaultAddress.city}, ${s.customer.defaultAddress.province}, ${s.customer.defaultAddress.zip}`
+              : prev.enderecoEntrega,
+          }));
+        }
+      } catch (err) {
+        console.error("Erro ao enriquecer com Shopify:", err);
+      }
+    }
   };
 
   const handleNewManual = () => {
