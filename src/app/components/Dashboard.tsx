@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import GerarDefesaModal from "./GerarDefesaModal";
 
 interface ChargebackItem {
   id: string;
@@ -13,6 +14,12 @@ interface ChargebackItem {
   customerName: string;
   customerEmail: string;
   rascunho?: any;
+  // Dados enriquecidos da Shopify
+  shopifyOrderName?: string;
+  shopifyFulfillmentStatus?: string;
+  shopifyTrackingNumber?: string;
+  shopifyTrackingCompany?: string;
+  shopifyTrackingUrl?: string;
 }
 
 interface DashboardProps {
@@ -65,6 +72,7 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
   const [lastUpdate, setLastUpdate] = useState<string>("");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [pulse, setPulse] = useState(false);
+  const [selectedChargebackForModal, setSelectedChargebackForModal] = useState<ChargebackItem | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -356,6 +364,42 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
                       <span className="text-xs text-gray-300">·</span>
                       <span className="text-xs text-gray-400">{timeAgo(cb.createdAt)}</span>
                     </div>
+
+                    {/* Dados enriquecidos da Shopify */}
+                    {cb.shopifyOrderName && (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className="text-xs text-gray-500">Shopify:</span>
+                        <span className="text-xs font-medium text-gray-700">{cb.shopifyOrderName}</span>
+                        {cb.shopifyFulfillmentStatus === "fulfilled" && (
+                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                            Entregue
+                          </span>
+                        )}
+                        {cb.shopifyFulfillmentStatus === "partial" && (
+                          <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                            Parcial
+                          </span>
+                        )}
+                        {cb.shopifyTrackingNumber && (
+                          <>
+                            <span className="text-xs text-gray-300">·</span>
+                            {cb.shopifyTrackingUrl ? (
+                              <a
+                                href={cb.shopifyTrackingUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:underline font-mono"
+                              >
+                                {cb.shopifyTrackingNumber}
+                              </a>
+                            ) : (
+                              <span className="text-xs text-gray-600 font-mono">{cb.shopifyTrackingNumber}</span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     <div className="mt-1">
                       <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
                         {REASON_LABELS[cb.reason] ?? cb.reason}
@@ -370,7 +414,7 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
                       <p className="text-xs text-gray-400">em disputa</p>
                     </div>
                     <button
-                      onClick={() => onSelectChargeback?.(cb)}
+                      onClick={() => setSelectedChargebackForModal(cb)}
                       className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -391,6 +435,18 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
         <p className="text-center text-xs text-gray-400">
           Atualização automática a cada 15 segundos · {items.length} chargeback{items.length !== 1 ? "s" : ""} no total
         </p>
+      )}
+
+      {/* Modal para gerar defesa */}
+      {selectedChargebackForModal && (
+        <GerarDefesaModal
+          chargeback={selectedChargebackForModal}
+          onClose={() => setSelectedChargebackForModal(null)}
+          onSuccess={(enrichedChargeback) => {
+            setSelectedChargebackForModal(null);
+            onSelectChargeback?.(enrichedChargeback);
+          }}
+        />
       )}
     </div>
   );
