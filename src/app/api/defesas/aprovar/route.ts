@@ -1,26 +1,19 @@
 "use server";
 
 import { PagarmeAPI } from "@/lib/pagarme";
+import prisma from "@/lib/db";
 
 interface AprovarDefesaRequest {
   defesaId: string;
   chargebackId: string;
-  dossieMD: string; // Markdown do dossiê para enviar
-  parecer?: string; // Parecer jurídico resumido
-  submitToPagarme?: boolean; // Se deve submeter resposta para Pagar.me
+  dossieMD: string;
+  parecer?: string;
+  submitToPagarme?: boolean;
 }
 
 /**
  * POST /api/defesas/aprovar
- *
- * Aprova uma defesa e opcionalmente submete para Pagar.me
- * - Valida defesa existe
- * - Marca como submitted
- * - Se submitToPagarme=true, envia resposta à Pagar.me
- * - Retorna status da submissão
- *
- * Usado por: Dashboard (usuário clica "Enviar Defesa")
- *           ou n8n (se configurado para auto-submit)
+ * Aprova uma defesa e opcionalmente submete para Pagar.me.
  */
 export async function POST(request: Request) {
   try {
@@ -33,41 +26,30 @@ export async function POST(request: Request) {
       );
     }
 
-    // TODO: Buscar defesa do localStorage
-    // const defesaSalva = getDefesaById(body.defesaId);
-    // if (!defesaSalva) {
-    //   return Response.json({ error: "Defesa não encontrada" }, { status: 404 });
-    // }
+    // Busca defesa no banco
+    const defesa = await prisma.defesa.findUnique({ where: { id: body.defesaId } });
+    if (!defesa) {
+      return Response.json({ error: "Defesa não encontrada" }, { status: 404 });
+    }
 
     let submitResult: any = null;
 
-    // Se solicitado, submete para Pagar.me
     if (body.submitToPagarme) {
       try {
         const pagarme = new PagarmeAPI(process.env.PAGARME_API_KEY || "");
-
-        // Submete defesa de chargeback (converte texto para Buffer)
         const evidenceBuffer = Buffer.from(body.dossieMD, "utf-8");
         submitResult = await pagarme.submitChargebackDefense(
           body.chargebackId,
           evidenceBuffer,
           "document"
         );
-
-        console.log(
-          `Resposta de chargeback ${body.chargebackId} submetida:`,
-          submitResult
-        );
+        console.log(`Defesa ${body.defesaId} submetida ao Pagar.me:`, submitResult);
       } catch (error) {
-        console.error(
-          "Erro ao submeter resposta à Pagar.me:",
-          error
-        );
-        // Não falha completamente - continua mesmo se Pagar.me falhar
+        console.error("Erro ao submeter ao Pagar.me:", error);
         return Response.json(
           {
             success: false,
-            error: `Defesa aprovada localmente, mas erro ao submeter para Pagar.me: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
+            error: `Defesa aprovada, mas erro ao submeter para Pagar.me: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
             defesaId: body.defesaId,
             chargebackId: body.chargebackId,
           },
@@ -76,14 +58,29 @@ export async function POST(request: Request) {
       }
     }
 
-    // TODO: Marcar defesa como submitted no localStorage
-    // updateDefesaStatus(body.defesaId, "submitted", submitResult);
+    const novoStatus = body.submitToPagarme ? "submitted" : "approved";
+
+    // Atualiza status no banco
+    await prisma.defesa.update({
+      where: { id: body.defesaId },
+      data: {
+        status: novoStatus,
+        pagarmeResponse: submitResult ? JSON.stringify(submitResult) : null,
+        submittedAt: body.submitToPagarme ? new Date() : null,
+      },
+    });
+
+    // Atualiza status do chargeback pai
+    await prisma.chargeback.update({
+      where: { externalId: body.chargebackId },
+      data: { status: "defending" },
+    }).catch(() => {}); // ignora se não encontrar pelo externalId
 
     return Response.json({
       success: true,
       defesaId: body.defesaId,
       chargebackId: body.chargebackId,
-      status: body.submitToPagarme ? "submitted" : "approved",
+      status: novoStatus,
       message: body.submitToPagarme
         ? "Defesa aprovada e submetida à Pagar.me"
         : "Defesa aprovada localmente",
@@ -92,11 +89,9 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Erro ao aprovar defesa:", error);
     return Response.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Erro ao aprovar defesa",
-      },
+      { success: false, error: error instanceof Error ? error.message : "Erro ao aprovar defesa" },
       { status: 500 }
     );
   }
 }
+

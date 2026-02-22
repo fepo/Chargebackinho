@@ -2,3 +2,8 @@
 .env*.local
 node_modules
 .next/
+
+# Copilot memory
+MEMORY.md
+
+/src/generated/prisma

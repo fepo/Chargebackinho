@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// Chargeback recebido via webhook Pagar.me ou listado manualmente
+model Chargeback {
+  id              String   @id @default(cuid())
+  externalId      String?  @unique  // ID Pagar.me (charge_id ou dispute_id)
+  chargeId        String?
+  gateway         String   @default("pagarme")
+  status          String   @default("pending") // pending, defending, won, lost, closed
+  reason          String?
+  tipoContestacao String?
+  valorTransacao  String?
+  bandeira        String?
+  finalCartao     String?
+  dataTransacao   String?
+  numeroPedido    String?
+  nomeCliente     String?
+  cpfCliente      String?
+  emailCliente    String?
+  enderecoEntrega String?
+  itensPedido     String?  // JSON
+  eventosRastreio String?  // JSON
+  comunicacoes    String?  // JSON
+  transportadora  String?
+  codigoRastreio  String?
+  shopifyData     String?  // JSON
+  rawPayload      String?  // JSON original do webhook
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  defesas         Defesa[]
+}
+
+// Defesa gerada (manualmente ou via n8n)
+model Defesa {
+  id              String    @id @default(cuid())
+  chargebackId    String
+  chargeback      Chargeback @relation(fields: [chargebackId], references: [id])
+  dossie          String    // markdown do dossiê
+  contestacao     String    // texto da contestação
+  parecerJuridico String?
+  status          String    @default("drafted") // drafted, approved, submitted, won, lost
+  source          String    @default("manual")  // manual, n8n
+  pagarmeResponse String?   // JSON da resposta do Pagar.me
+  submittedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  webhookEvents   WebhookEvent[]
+}
+
+// Log de webhooks recebidos (idempotência)
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  source      String   // pagarme, n8n
+  eventType   String   // tipo do evento
+  externalId  String?  // ID externo para idempotência
+  payload     String   // JSON raw
+  processed   Boolean  @default(false)
+  defesaId    String?
+  defesa      Defesa?  @relation(fields: [defesaId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([source, externalId])
+}

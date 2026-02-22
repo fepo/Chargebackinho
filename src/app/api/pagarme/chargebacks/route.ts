@@ -3,41 +3,7 @@ import { getShopifyAPI } from "@/lib/shopify";
 import type { FormContestacao } from "@/types";
 import type { ShopifyOrder } from "@/lib/shopify";
 import crypto from "crypto";
-
-// ─── Blob helpers ─────────────────────────────────────────────────────────────
-// Usa @vercel/blob para persistência entre serverless instances no Vercel.
-// Fallback gracioso se BLOB_READ_WRITE_TOKEN não estiver configurado.
-
-const BLOB_KEY = "chargebacks-store.json";
-
-async function readStore(): Promise<any[]> {
-  try {
-    const { list } = await import("@vercel/blob");
-    const { blobs } = await list({ prefix: BLOB_KEY });
-    if (!blobs.length) return [];
-    const res = await fetch(blobs[0].url);
-    return await res.json();
-  } catch {
-    // Fallback: memória global
-    const g = globalThis as any;
-    return g._cbstore ?? [];
-  }
-}
-
-async function writeStore(data: any[]) {
-  try {
-    const { put } = await import("@vercel/blob");
-    await put(BLOB_KEY, JSON.stringify(data), {
-      access: "public",
-      contentType: "application/json",
-      allowOverwrite: true,
-    });
-  } catch {
-    // Fallback: memória global
-    const g = globalThis as any;
-    g._cbstore = data;
-  }
-}
+import prisma from "@/lib/db";
 
 /**
  * Encontra o melhor match entre pedidos Shopify baseado em valor e data
@@ -108,6 +74,17 @@ export async function POST(req: Request) {
       return Response.json({ received: true, ignored: true });
     }
 
+    // Idempotência: ignora eventos já processados
+    const eventId = payload.id as string | undefined;
+    if (eventId) {
+      const existing = await prisma.webhookEvent.findUnique({
+        where: { source_externalId: { source: "pagarme", externalId: eventId } },
+      });
+      if (existing?.processed) {
+        return Response.json({ received: true, duplicate: true });
+      }
+    }
+
     const d = payload.data;
     const chargeId = d.charge_id || d.id;
     const orderId = d.order_id;
@@ -150,9 +127,11 @@ export async function POST(req: Request) {
       }
     }
 
+    const contestacaoId = d.id || `cb_${Date.now()}`;
+
     const rascunho: FormContestacao = {
       gateway: "pagarme",
-      contestacaoId: d.id || `cb_${Date.now()}`,
+      contestacaoId,
       dataContestacao: new Date().toISOString().split("T")[0],
       tipoContestacao: inferirTipo(reason),
       valorTransacao: (amount / 100).toFixed(2),
@@ -194,40 +173,52 @@ export async function POST(req: Request) {
       politicaReembolsoUrl: "",
     };
 
-    const record = {
-      id: rascunho.contestacaoId,
-      chargeId,
-      orderId,
-      amount: amount / 100,
-      reason,
-      customerName: rascunho.nomeCliente,
-      customerEmail: rascunho.emailCliente,
-      createdAt: new Date().toISOString(),
-      status: "opened",
-      rascunho,
-      // Dados enriquecidos da Shopify
-      ...(shopifyOrder && {
-        shopifyOrderName: shopifyOrder.name,
-        shopifyFulfillmentStatus: shopifyOrder.fulfillmentStatus,
-        shopifyTrackingNumber: shopifyOrder.fulfillments?.[0]?.trackingInfo?.number,
-        shopifyTrackingCompany: shopifyOrder.fulfillments?.[0]?.trackingInfo?.company,
-        shopifyTrackingUrl: shopifyOrder.fulfillments?.[0]?.trackingInfo?.url,
-      }),
-    };
+    // Persiste no banco com upsert (idempotente por externalId)
+    const chargeback = await prisma.chargeback.upsert({
+      where: { externalId: contestacaoId },
+      update: { status: "pending", updatedAt: new Date() },
+      create: {
+        externalId: contestacaoId,
+        chargeId,
+        gateway: "pagarme",
+        status: "pending",
+        reason,
+        tipoContestacao: rascunho.tipoContestacao,
+        valorTransacao: rascunho.valorTransacao,
+        bandeira: rascunho.bandeira,
+        finalCartao: rascunho.finalCartao,
+        dataTransacao: rascunho.dataTransacao,
+        numeroPedido: rascunho.numeroPedido,
+        nomeCliente: rascunho.nomeCliente,
+        cpfCliente: rascunho.cpfCliente,
+        emailCliente: rascunho.emailCliente,
+        enderecoEntrega: rascunho.enderecoEntrega,
+        itensPedido: JSON.stringify(rascunho.itensPedido),
+        eventosRastreio: JSON.stringify(rascunho.eventosRastreio),
+        comunicacoes: JSON.stringify(rascunho.comunicacoes),
+        shopifyData: shopifyOrder ? JSON.stringify(shopifyOrder) : null,
+        rawPayload: bodyText,
+      },
+    });
 
-    // Persiste no Blob Store
-    const existing = await readStore();
-    const updated = [
-      record,
-      ...existing.filter((c: any) => c.id !== record.id),
-    ].slice(0, 200);
-    await writeStore(updated);
+    // Registra evento de webhook (idempotência)
+    await prisma.webhookEvent.upsert({
+      where: { source_externalId: { source: "pagarme", externalId: eventId ?? contestacaoId } },
+      update: { processed: true },
+      create: {
+        source: "pagarme",
+        eventType: payload.type,
+        externalId: eventId ?? contestacaoId,
+        payload: bodyText,
+        processed: true,
+      },
+    });
 
-    console.log(`✅ Chargeback ${record.id} — R$ ${rascunho.valorTransacao} — ${rascunho.nomeCliente}`);
+    console.log(`✅ Chargeback ${chargeback.id} — R$ ${rascunho.valorTransacao} — ${rascunho.nomeCliente}`);
 
     return Response.json({
       received: true,
-      chargebackId: record.id,
+      chargebackId: chargeback.id,
       message: `Chargeback de R$ ${rascunho.valorTransacao} salvo`,
     });
   } catch (error) {
@@ -241,7 +232,11 @@ export async function POST(req: Request) {
 // Retorna todos os chargebacks armazenados (para o Dashboard).
 
 export async function GET() {
-  const chargebacks = await readStore();
+  const chargebacks = await prisma.chargeback.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    include: { defesas: { select: { id: true, status: true, createdAt: true } } },
+  });
   return Response.json(chargebacks);
 }
 
@@ -259,3 +254,4 @@ function fmtEndereco(e: any): string {
   if (!e) return "";
   return [e.line1, e.line2, e.zipCode, e.city, e.state].filter(Boolean).join(", ");
 }
+
