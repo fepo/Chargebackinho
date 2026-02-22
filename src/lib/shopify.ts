@@ -146,35 +146,32 @@ export class ShopifyAPI {
                       id
                       title
                       quantity
-                      price {
-                        amount
+                      originalUnitPriceSet {
+                        shopMoney {
+                          amount
+                        }
                       }
                       sku
-                      variantId
                     }
                   }
                 }
-                fulfillments(first: 100) {
-                  edges {
-                    node {
-                      id
-                      status
-                      createdAt
-                      updatedAt
-                      trackingInfo {
-                        number
-                        company
-                        url
-                      }
-                      fulfillmentLineItems(first: 100) {
-                        edges {
-                          node {
-                            id
-                            quantity
-                            lineItem {
-                              id
-                            }
-                          }
+                fulfillments {
+                  id
+                  status
+                  createdAt
+                  updatedAt
+                  trackingInfo {
+                    number
+                    company
+                    url
+                  }
+                  fulfillmentLineItems(first: 100) {
+                    edges {
+                      node {
+                        id
+                        quantity
+                        lineItem {
+                          id
                         }
                       }
                     }
@@ -191,18 +188,18 @@ export class ShopifyAPI {
                     amount
                   }
                 }
-                taxPriceSet {
+                totalTaxSet {
                   shopMoney {
                     amount
                   }
                 }
-                shippingPriceSet {
+                totalShippingPriceSet {
                   shopMoney {
                     amount
                   }
                 }
-                financialStatus
-                fulfillmentStatus
+                displayFinancialStatus
+                displayFulfillmentStatus
                 tags
               }
             }
@@ -266,35 +263,32 @@ export class ShopifyAPI {
                       id
                       title
                       quantity
-                      price {
-                        amount
+                      originalUnitPriceSet {
+                        shopMoney {
+                          amount
+                        }
                       }
                       sku
-                      variantId
                     }
                   }
                 }
-                fulfillments(first: 100) {
-                  edges {
-                    node {
-                      id
-                      status
-                      createdAt
-                      updatedAt
-                      trackingInfo {
-                        number
-                        company
-                        url
-                      }
-                      fulfillmentLineItems(first: 100) {
-                        edges {
-                          node {
-                            id
-                            quantity
-                            lineItem {
-                              id
-                            }
-                          }
+                fulfillments {
+                  id
+                  status
+                  createdAt
+                  updatedAt
+                  trackingInfo {
+                    number
+                    company
+                    url
+                  }
+                  fulfillmentLineItems(first: 100) {
+                    edges {
+                      node {
+                        id
+                        quantity
+                        lineItem {
+                          id
                         }
                       }
                     }
@@ -311,18 +305,18 @@ export class ShopifyAPI {
                     amount
                   }
                 }
-                taxPriceSet {
+                totalTaxSet {
                   shopMoney {
                     amount
                   }
                 }
-                shippingPriceSet {
+                totalShippingPriceSet {
                   shopMoney {
                     amount
                   }
                 }
-                financialStatus
-                fulfillmentStatus
+                displayFinancialStatus
+                displayFulfillmentStatus
                 tags
               }
             }
@@ -369,17 +363,18 @@ export class ShopifyAPI {
         id: edge.node.id,
         title: edge.node.title,
         quantity: edge.node.quantity,
-        price: edge.node.price?.amount || "0",
+        price: edge.node.originalUnitPriceSet?.shopMoney?.amount || edge.node.price?.amount || "0",
         sku: edge.node.sku,
-        variantId: edge.node.variantId,
+        variantId: edge.node.variant?.id || null,
       })),
-      fulfillments: (node.fulfillments?.edges || []).map((edge: any) => ({
-        id: edge.node.id,
-        status: edge.node.status,
-        createdAt: edge.node.createdAt,
-        updatedAt: edge.node.updatedAt,
-        trackingInfo: edge.node.trackingInfo || undefined,
-        fulfillmentLineItems: (edge.node.fulfillmentLineItems?.edges || []).map((fli: any) => ({
+      // fulfillments is a direct array in 2024-10 (not edges/node)
+      fulfillments: (Array.isArray(node.fulfillments) ? node.fulfillments : (node.fulfillments?.edges || []).map((e: any) => e.node)).map((f: any) => ({
+        id: f.id,
+        status: f.status?.toLowerCase?.() ?? f.status,
+        createdAt: f.createdAt,
+        updatedAt: f.updatedAt,
+        trackingInfo: Array.isArray(f.trackingInfo) ? f.trackingInfo[0] : (f.trackingInfo || undefined),
+        fulfillmentLineItems: (f.fulfillmentLineItems?.edges || []).map((fli: any) => ({
           id: fli.node.id,
           quantity: fli.node.quantity,
           lineItemId: fli.node.lineItem?.id,
@@ -387,11 +382,11 @@ export class ShopifyAPI {
       })),
       totalPrice: node.totalPriceSet?.shopMoney?.amount || "0",
       subtotalPrice: node.subtotalPriceSet?.shopMoney?.amount || "0",
-      taxPrice: node.taxPriceSet?.shopMoney?.amount || "0",
-      shippingPrice: node.shippingPriceSet?.shopMoney?.amount || "0",
+      taxPrice: node.totalTaxSet?.shopMoney?.amount || node.taxPriceSet?.shopMoney?.amount || "0",
+      shippingPrice: node.totalShippingPriceSet?.shopMoney?.amount || node.shippingPriceSet?.shopMoney?.amount || "0",
       currency: node.totalPriceSet?.shopMoney?.currencyCode || "BRL",
-      financialStatus: node.financialStatus,
-      fulfillmentStatus: node.fulfillmentStatus,
+      financialStatus: (node.displayFinancialStatus ?? node.financialStatus)?.toLowerCase?.() ?? null,
+      fulfillmentStatus: (node.displayFulfillmentStatus ?? node.fulfillmentStatus)?.toLowerCase?.() ?? null,
       tags: node.tags || [],
     };
   }

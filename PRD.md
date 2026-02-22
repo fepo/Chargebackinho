@@ -39,11 +39,12 @@ Operadores de e-commerce (PT-BR) que lidam com chargebacks recorrentes.
 | Export DOCX | `POST /api/exportar-docx` |
 | Export PDF (HTML → print) | `POST /api/exportar-pdf` |
 | Webhook Pagar.me (recebe chargeback) | `POST /api/pagarme/chargebacks` |
-| Webhook Shopify | `POST /api/shopify/webhook` |
+| Webhook Shopify (Prisma + idempotência) | `POST /api/shopify/webhook` |
+| Enriquecer chargeback via Shopify | `POST /api/shopify/enrich` |
 | Webhook n8n (resultado defesa) | `POST /api/defesas/webhook` |
 | Listar chargebacks (Pagar.me API) | `GET /api/pagarme/list-chargebacks` |
 | Dashboard de defesas | `/defesas` |
-| Histórico de chargebacks | `/historico` |
+| Histórico de chargebacks (c/ coluna Shopify) | `/historico` |
 | Detalhe de defesa | `/defesas/[id]` |
 | Salvar defesa no DB | `POST /api/defesas/salvar` |
 | Aprovar + submeter ao Pagar.me | `POST /api/defesas/aprovar` |

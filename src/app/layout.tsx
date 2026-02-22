@@ -24,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
             <nav className="flex gap-6 text-sm font-medium">
               <a href="/" className="text-gray-600 hover:text-brand-600">Contestações</a>
+              <a href="/dados" className="text-gray-600 hover:text-brand-600">Dados</a>
               <a href="/defesas" className="text-gray-600 hover:text-brand-600">Defesas</a>
               <a href="/shopify" className="text-gray-600 hover:text-brand-600">🛒 Shopify</a>
               <a href="/historico" className="text-gray-600 hover:text-brand-600">Histórico</a>
