@@ -5,7 +5,10 @@
       "Bash(npx next build:*)",
       "Bash(npx prisma generate:*)",
       "Bash(npx kill-port:*)",
-      "Bash(taskkill //F //FI \"WINDOWTITLE eq next*\")"
+      "Bash(taskkill //F //FI \"WINDOWTITLE eq next*\")",
+      "Bash(start:*)",
+      "Bash(ping:*)",
+      "Bash(curl:*)"
     ]
   }
 }

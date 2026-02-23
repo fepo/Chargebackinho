@@ -1,16 +1,14 @@
 /**
  * Middleware de proteção por senha simples.
  *
- * Protege todas as páginas públicas com uma senha única.
- * A variável PROTECT_PASSWORD deve ser definida no painel da Vercel
- * (Settings → Environment Variables). Fallback local: "minhasenha".
+ * Apenas verifica o cookie de autenticação.
+ * O login é processado pela API route /api/login.
  *
  * Rotas ignoradas: /api/*, /_next/*, favicon.ico e assets estáticos.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 
-const PASSWORD = process.env.PROTECT_PASSWORD ?? "minhasenha";
 const COOKIE_NAME = "auth_token";
 const COOKIE_VALUE = "authenticated";
 
@@ -38,7 +36,7 @@ function loginPage(error = false): NextResponse {
   <div class="card">
     <h1>Acesso restrito</h1>
     <p>Digite a senha para continuar.</p>
-    <form method="POST" action="/">
+    <form method="POST" action="/api/login">
       <input type="password" name="password" placeholder="Senha" autofocus required />
       <button type="submit">Entrar</button>
       ${error ? '<p class="error">Senha incorreta.</p>' : ""}
@@ -53,67 +51,20 @@ function loginPage(error = false): NextResponse {
   });
 }
 
-export async function middleware(request: NextRequest) {
-  // POST = tentativa de login
-  if (request.method === "POST") {
-    let password = "";
-
-    try {
-      const body = await request.text();
-      // body ex.: "password=LOFIBEATS2026"
-      const params = new URLSearchParams(body);
-      password = (params.get("password") ?? "").trim();
-    } catch {
-      return loginPage(true);
-    }
-
-    if (password === PASSWORD) {
-      const url = request.nextUrl.clone();
-      // Se já estiver na raiz, não redireciona para evitar loop
-      if (url.pathname === "/") {
-        const response = NextResponse.next();
-        response.cookies.set(COOKIE_NAME, COOKIE_VALUE, {
-          httpOnly: false, // Alterado para false para permitir acesso no localhost sem problemas
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          path: "/",
-          maxAge: 60 * 60 * 24 * 7, // 7 dias
-        });
-        return response;
-      }
-      
-      url.pathname = "/";
-      const response = NextResponse.redirect(url);
-      response.cookies.set(COOKIE_NAME, COOKIE_VALUE, {
-        httpOnly: false, // Alterado para false para permitir acesso no localhost sem problemas
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7, // 7 dias
-      });
-      return response;
-    }
-
-    return loginPage(true);
-  }
-
-  // GET — verifica cookie
+export function middleware(request: NextRequest) {
+  // Verifica cookie
   const cookie = request.cookies.get(COOKIE_NAME);
   if (cookie?.value === COOKIE_VALUE) {
     return NextResponse.next();
   }
 
-  return loginPage();
+  // Sem cookie → mostra login (com erro se veio redirecionado)
+  const hasError = request.nextUrl.searchParams.get("error") === "1";
+  return loginPage(hasError);
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match todas as rotas EXCETO:
-     * - /api (rotas de API / webhooks)
-     * - /_next (assets do Next.js)
-     * - favicon.ico, arquivos estáticos
-     */
     "/((?!api|_next|favicon\\.ico|.*\\.).*)",
   ],
 };
