@@ -1,13 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PASSWORD = process.env.PROTECT_PASSWORD ?? "minhasenha";
-
 export async function POST(request: NextRequest) {
-  const formData = await request.formData();
-  const password = (formData.get("password") as string ?? "").trim();
+  const envPassword = (process.env.PROTECT_PASSWORD ?? "").trim();
 
-  if (password === PASSWORD) {
-    const response = NextResponse.redirect(new URL("/", request.url));
+  let password = "";
+  try {
+    const formData = await request.formData();
+    password = (formData.get("password") as string ?? "").trim();
+  } catch {
+    // Fallback: parse body manually
+    const text = await request.text();
+    const params = new URLSearchParams(text);
+    password = (params.get("password") ?? "").trim();
+  }
+
+  console.log("[LOGIN]", {
+    envVarExists: !!process.env.PROTECT_PASSWORD,
+    envLen: envPassword.length,
+    inputLen: password.length,
+    match: password === envPassword,
+  });
+
+  if (envPassword && password === envPassword) {
+    const url = new URL("/", request.url);
+    const response = NextResponse.redirect(url, 303);
     response.cookies.set("auth_token", "authenticated", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -19,5 +35,5 @@ export async function POST(request: NextRequest) {
   }
 
   // Senha errada → redireciona com query param de erro
-  return NextResponse.redirect(new URL("/?error=1", request.url));
+  return NextResponse.redirect(new URL("/?error=1", request.url), 303);
 }
