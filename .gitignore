@@ -6,6 +6,8 @@ dev.db
 *.db
 node_modules
 .next/
+.env.local
+
 
 # Copilot memory
 MEMORY.md

@@ -50,6 +50,15 @@ interface ShopifyData {
   tags: string[];
 }
 
+type MatchMethod = "metadata_order_number" | "email_valor_match" | "email_primeiro_pedido" | "manual" | null;
+
+const MATCH_METHOD_LABELS: Record<NonNullable<MatchMethod>, { label: string; cls: string }> = {
+  metadata_order_number: { label: "Metadata (nº pedido)", cls: "bg-violet-100 text-violet-700" },
+  email_valor_match:     { label: "Email + valor",        cls: "bg-emerald-100 text-emerald-700" },
+  email_primeiro_pedido: { label: "Email (fallback)",     cls: "bg-yellow-100 text-yellow-700" },
+  manual:                { label: "Busca manual",         cls: "bg-blue-100 text-blue-700" },
+};
+
 interface UnifiedChargeback {
   id: string;
   chargeId: string;
@@ -64,7 +73,7 @@ interface UnifiedChargeback {
     pagarmeOrderId: string | null;
     customerEmail: string | null;
     metadataKeys: string[];
-    matchMethod: string | null;
+    matchMethod: MatchMethod;
     attempts: string[];
     matched: boolean;
   };
@@ -433,7 +442,11 @@ export default function DadosPage() {
                             <Row label="Nome" value={cb.pagarme.customer.name} />
                             <Row label="Email" value={cb.pagarme.customer.email} />
                             <Row label="CPF/CNPJ" value={cb.pagarme.customer.documentNumber} />
-                            <Row label="Telefone" value={cb.pagarme.customer.phoneNumber} />
+                            <Row label="Telefone" value={
+                              typeof cb.pagarme.customer.phoneNumber === "object" && cb.pagarme.customer.phoneNumber
+                                ? `+${(cb.pagarme.customer.phoneNumber as {country_code?:string;area_code?:string;number?:string}).country_code ?? "55"} (${(cb.pagarme.customer.phoneNumber as {area_code?:string}).area_code ?? ""}) ${(cb.pagarme.customer.phoneNumber as {number?:string}).number ?? ""}`
+                                : cb.pagarme.customer.phoneNumber
+                            } />
                           </Section>
                         )}
 
@@ -486,6 +499,24 @@ export default function DadosPage() {
                       <h3 className="text-sm font-bold text-emerald-700 flex items-center gap-1.5 mb-3">
                         <span className="w-2 h-2 bg-emerald-500 rounded-full" />
                         Shopify
+                        {cb.shopify && cb._matchDebug?.matchMethod && (() => {
+                          const m = MATCH_METHOD_LABELS[cb._matchDebug.matchMethod as NonNullable<MatchMethod>];
+                          return m ? (
+                            <span className={`ml-1 text-xs px-1.5 py-0.5 rounded font-medium ${m.cls}`}>
+                              {m.label}
+                            </span>
+                          ) : null;
+                        })()}
+                        {cb.shopify && !cb._matchDebug?.matchMethod && (
+                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-500">
+                            Vinculado
+                          </span>
+                        )}
+                        {!cb.shopify && (
+                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded font-medium bg-red-100 text-red-600">
+                            Sem match
+                          </span>
+                        )}
                       </h3>
 
                       {!cb.shopify ? (

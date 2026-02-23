@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import GerarDefesaModal from "./GerarDefesaModal";
+import { useRouter } from "next/navigation";
 
 interface ChargebackItem {
   id: string;
@@ -65,6 +65,7 @@ function timeAgo(dateStr: string) {
 }
 
 export default function Dashboard({ onSelectChargeback, onNewManual }: DashboardProps) {
+  const router = useRouter();
   const [items, setItems] = useState<ChargebackItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -72,7 +73,6 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
   const [lastUpdate, setLastUpdate] = useState<string>("");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [pulse, setPulse] = useState(false);
-  const [selectedChargebackForModal, setSelectedChargebackForModal] = useState<ChargebackItem | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -414,13 +414,16 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
                       <p className="text-xs text-gray-400">em disputa</p>
                     </div>
                     <button
-                      onClick={() => setSelectedChargebackForModal(cb)}
+                      onClick={() => {
+                        sessionStorage.setItem(`cb_analyze_${cb.id}`, JSON.stringify(cb));
+                        router.push(`/analisar/${cb.id}`);
+                      }}
                       className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
-                      Gerar Defesa
+                      Analisar
                     </button>
                   </div>
                 </div>
@@ -437,17 +440,6 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
         </p>
       )}
 
-      {/* Modal para gerar defesa */}
-      {selectedChargebackForModal && (
-        <GerarDefesaModal
-          chargeback={selectedChargebackForModal}
-          onClose={() => setSelectedChargebackForModal(null)}
-          onSuccess={(enrichedChargeback) => {
-            setSelectedChargebackForModal(null);
-            onSelectChargeback?.(enrichedChargeback);
-          }}
-        />
-      )}
     </div>
   );
 }

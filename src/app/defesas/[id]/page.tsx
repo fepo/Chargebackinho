@@ -3,105 +3,155 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { obterRascunho, type Rascunho } from "@/lib/storage";
-import type { FormContestacao } from "@/types";
 import { DossieViewer } from "@/app/components/DossieViewer";
 import { ApprovalModal } from "@/app/components/ApprovalModal";
 
-interface Defesa extends Rascunho {
-  formulario: FormContestacao & {
-    _defesaMeta?: {
-      chargebackId: string;
-      dossieTitulo: string;
-      dossieMD: string;
-      parecer?: {
-        tipo: string;
-        viabilidade: number;
-        parecer: string;
-        argumentos: string[];
-        recomendacao: "responder" | "nao_responder" | "acompanhar";
-        confianca: number;
-      };
-      shopifyData?: any;
-      source: "n8n" | "manual";
-      status: "drafted" | "submitted" | "won" | "lost";
-      geradoEm: string;
-      aprovarEm?: string;
-    };
-  };
+/* ── Tipos ────────────────────────────────────────────────────────────────── */
+interface ChargebackDB {
+  id: string;
+  externalId: string | null;
+  chargeId: string | null;
+  gateway: string;
+  status: string;
+  reason: string | null;
+  tipoContestacao: string | null;
+  valorTransacao: string | null;
+  bandeira: string | null;
+  finalCartao: string | null;
+  dataTransacao: string | null;
+  numeroPedido: string | null;
+  nomeCliente: string | null;
+  cpfCliente: string | null;
+  emailCliente: string | null;
+  enderecoEntrega: string | null;
+  transportadora: string | null;
+  codigoRastreio: string | null;
+  shopifyData: string | null;
+  createdAt: string;
 }
 
+interface DefesaDB {
+  id: string;
+  chargebackId: string;
+  dossie: string;
+  contestacao: string;
+  parecerJuridico: string | null;
+  status: "drafted" | "approved" | "submitted" | "won" | "lost";
+  source: string;
+  pagarmeResponse: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  chargeback: ChargebackDB;
+}
+
+/* ── Helpers de label ─────────────────────────────────────────────────────── */
+const STATUS_LABELS: Record<string, { label: string; cls: string; dot: string }> = {
+  drafted:   { label: "Rascunho — Aguardando Aprovação", cls: "bg-yellow-100 text-yellow-800", dot: "bg-yellow-500" },
+  approved:  { label: "Aprovado",                        cls: "bg-blue-100 text-blue-800",    dot: "bg-blue-500" },
+  submitted: { label: "Enviado para Pagar.me",           cls: "bg-indigo-100 text-indigo-800", dot: "bg-indigo-500" },
+  won:       { label: "Ganho",                           cls: "bg-green-100 text-green-800",  dot: "bg-green-500" },
+  lost:      { label: "Perdido",                         cls: "bg-red-100 text-red-800",      dot: "bg-red-500" },
+};
+
+const TIPO_LABELS: Record<string, string> = {
+  desacordo_comercial:    "Desacordo Comercial",
+  produto_nao_recebido:   "Produto Não Recebido",
+  fraude:                 "Fraude",
+  credito_nao_processado: "Crédito Não Processado",
+};
+
+function Field({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div>
+      <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+      <p className="text-sm font-medium text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+/* ── Componente ───────────────────────────────────────────────────────────── */
 export default function DefesaPage() {
   const router = useRouter();
   const { id } = useParams();
-  const [defesa, setDefesa] = useState<Defesa | null>(null);
+  const [defesa, setDefesa] = useState<DefesaDB | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mounted, setMounted] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approving, setApproving] = useState(false);
 
-  // ── Carregar defesa ────────────────────────────────
   useEffect(() => {
-    if (typeof id === "string") {
-      const rascunho = obterRascunho(id) as Defesa | null;
-      if (rascunho && rascunho.formulario._defesaMeta) {
-        setDefesa(rascunho);
-      }
-      setMounted(true);
-      setLoading(false);
-    }
+    if (typeof id !== "string") return;
+
+    fetch(`/api/defesas/${id}`)
+      .then(async (r) => {
+        if (r.status === 404) { setNotFound(true); return; }
+        if (!r.ok) throw new Error("Erro ao carregar defesa");
+        const data: DefesaDB = await r.json();
+        setDefesa(data);
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  // ── Handler para aprovar ───────────────────────────
   const handleApprove = async () => {
     if (!defesa) return;
-
     setApproving(true);
     try {
-      const meta = defesa.formulario._defesaMeta!;
-
-      const response = await fetch("/api/defesas/aprovar", {
+      const res = await fetch("/api/defesas/aprovar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           defesaId: defesa.id,
-          chargebackId: meta.chargebackId,
-          dossieMD: meta.dossieMD,
-          parecer: meta.parecer?.parecer || "Veja dossiê anexo",
+          chargebackId: defesa.chargeback.externalId ?? defesa.chargebackId,
+          dossieMD: defesa.dossie,
+          parecer: defesa.parecerJuridico ?? "Veja dossiê anexo",
           submitToPagarme: true,
         }),
       });
-
-      const result = await response.json();
-
+      const result = await res.json();
       if (result.success) {
-        alert(`✓ Defesa enviada com sucesso!\n\nReferência: ${result.chargebackId}`);
+        setDefesa((d) => d ? { ...d, status: "submitted" } : d);
         setShowApprovalModal(false);
         router.push("/defesas");
       } else {
         alert(`Erro ao enviar: ${result.error}`);
       }
-    } catch (error) {
-      alert(`Erro ao enviar defesa: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
+    } catch (e) {
+      alert(`Erro ao enviar defesa: ${e instanceof Error ? e.message : "Erro desconhecido"}`);
     } finally {
       setApproving(false);
     }
   };
 
-  if (!mounted) {
+  /* ── Loading ──────────────────────────────────────────────────────────── */
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-500">Carregando defesa...</p>
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <div className="flex items-center gap-3 text-gray-500">
+          <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          Carregando defesa…
+        </div>
       </div>
     );
   }
 
-  if (!defesa) {
+  /* ── Not found ────────────────────────────────────────────────────────── */
+  if (notFound || !defesa) {
     return (
       <div className="space-y-6">
-        <div className="text-center py-12">
-          <p className="text-red-600 mb-4">❌ Defesa não encontrada</p>
-          <Link href="/defesas" className="text-brand-600 hover:text-brand-700 font-medium">
+        <div className="text-center py-16 bg-white border border-gray-200 rounded-xl">
+          <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <p className="text-gray-700 font-medium mb-1">Defesa não encontrada</p>
+          <p className="text-gray-400 text-sm mb-6">ID: {id}</p>
+          <Link href="/defesas" className="text-brand-600 hover:text-brand-700 font-medium text-sm">
             ← Voltar para defesas
           </Link>
         </div>
@@ -109,292 +159,215 @@ export default function DefesaPage() {
     );
   }
 
-  const meta = defesa.formulario._defesaMeta!;
-  const parecer = meta.parecer;
-  const canApprove = meta.status === "drafted";
+  const cb = defesa.chargeback;
+  const statusInfo = STATUS_LABELS[defesa.status] ?? STATUS_LABELS.drafted;
+  const canApprove = defesa.status === "drafted";
+
+  // Tenta parsear shopifyData
+  let shopify: Record<string, any> | null = null;
+  try {
+    if (cb.shopifyData) shopify = JSON.parse(cb.shopifyData);
+  } catch { /* ignora */ }
+
+  // Tenta parsear parecerJuridico como JSON (caso venha do n8n com objeto completo)
+  let parecerObj: {
+    tipo?: string; viabilidade?: number; confianca?: number;
+    argumentos?: string[]; recomendacao?: string; parecer?: string;
+  } | null = null;
+  try {
+    if (defesa.parecerJuridico) {
+      const parsed = JSON.parse(defesa.parecerJuridico);
+      if (typeof parsed === "object" && parsed !== null) parecerObj = parsed;
+    }
+  } catch { /* texto simples */ }
+
+  const parecerText = parecerObj?.parecer ?? defesa.parecerJuridico ?? null;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{meta.dossieTitulo}</h1>
-          <p className="text-gray-600 mt-1">Chargeback: {meta.chargebackId}</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Defesa — {cb.nomeCliente ?? cb.externalId ?? defesa.id.slice(0, 12)}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {cb.externalId ?? defesa.chargebackId}
+            {cb.tipoContestacao && ` · ${TIPO_LABELS[cb.tipoContestacao] ?? cb.tipoContestacao}`}
+          </p>
         </div>
-        <Link href="/defesas" className="text-gray-600 hover:text-gray-900 font-medium">
+        <Link href="/defesas" className="text-sm text-gray-600 hover:text-gray-900 font-medium">
           ← Voltar
         </Link>
       </div>
 
-      {/* Status & Badges */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* Status Badge */}
-        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-          <span className="w-2 h-2 rounded-full bg-yellow-500" />
-          {meta.status === "drafted"
-            ? "Rascunho - Aguardando Aprovação"
-            : meta.status === "submitted"
-              ? "Enviado para Pagar.me"
-              : meta.status === "won"
-                ? "Ganho"
-                : "Perdido"}
+      {/* ── Badges de status ───────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.cls}`}>
+          <span className={`w-2 h-2 rounded-full ${statusInfo.dot}`} />
+          {statusInfo.label}
         </span>
-
-        {/* Fonte Badge */}
-        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
-          {meta.source === "n8n" ? "🤖 Gerada Automaticamente" : "✋ Gerada Manualmente"}
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+          defesa.source === "n8n" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-700"
+        }`}>
+          {defesa.source === "n8n" ? "Automática (n8n)" : "Manual"}
         </span>
-
-        {/* Data */}
-        <span className="text-sm text-gray-600">
-          Gerado em {new Date(meta.geradoEm).toLocaleDateString("pt-BR", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
+        <span className="text-xs text-gray-400">
+          Gerado em {new Date(defesa.createdAt).toLocaleString("pt-BR", {
+            day: "2-digit", month: "2-digit", year: "numeric",
+            hour: "2-digit", minute: "2-digit",
           })}
         </span>
       </div>
 
-      {/* Parecer Card (se existe) */}
-      {parecer && (
-        <div className="card p-6 border-l-4 border-l-blue-500 space-y-4">
-          <h2 className="text-xl font-bold text-gray-900">📊 Parecer Jurídico</h2>
+      {/* ── Dados do Chargeback ─────────────────────────────────────────── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-gray-800 mb-4">Dados do Chargeback</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Field label="Valor" value={cb.valorTransacao ? `R$ ${cb.valorTransacao}` : null} />
+          <Field label="Cliente" value={cb.nomeCliente} />
+          <Field label="Email" value={cb.emailCliente} />
+          <Field label="CPF" value={cb.cpfCliente} />
+          <Field label="Pedido" value={cb.numeroPedido} />
+          <Field label="Cartão" value={cb.bandeira ? `${cb.bandeira} •••• ${cb.finalCartao ?? ""}` : null} />
+          <Field label="Transportadora" value={cb.transportadora} />
+          <Field label="Rastreio" value={cb.codigoRastreio} />
+        </div>
+        {cb.enderecoEntrega && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <Field label="Endereço de entrega" value={cb.enderecoEntrega} />
+          </div>
+        )}
+      </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            {/* Tipo */}
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Tipo de Disputa</p>
-              <p className="font-semibold text-gray-900 capitalize">
-                {parecer.tipo.replace(/_/g, " ")}
-              </p>
-            </div>
+      {/* ── Dados Shopify ──────────────────────────────────────────────── */}
+      {shopify && (
+        <div className="bg-white border border-emerald-200 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-emerald-700 mb-4 flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+            Dados Shopify Enriquecidos
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Field label="Pedido Shopify" value={shopify.orderName} />
+            <Field label="Fulfillment" value={shopify.fulfillmentStatus} />
+            <Field label="Pagamento" value={shopify.financialStatus} />
+            {shopify.trackingInfo && (
+              <Field label="Rastreio" value={shopify.trackingInfo.number} />
+            )}
+          </div>
+        </div>
+      )}
 
-            {/* Viabilidade */}
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Viabilidade</p>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all ${parecer.viabilidade >= 0.75
-                        ? "bg-green-500"
-                        : parecer.viabilidade >= 0.5
-                          ? "bg-yellow-500"
+      {/* ── Parecer Jurídico ───────────────────────────────────────────── */}
+      {(parecerObj || parecerText) && (
+        <div className="bg-white border border-blue-200 rounded-xl p-5 border-l-4 border-l-blue-500">
+          <h2 className="text-sm font-semibold text-gray-800 mb-4">Parecer Jurídico</h2>
+
+          {parecerObj && (
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              {parecerObj.viabilidade !== undefined && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Viabilidade</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full ${
+                          parecerObj.viabilidade >= 0.75 ? "bg-green-500"
+                          : parecerObj.viabilidade >= 0.5 ? "bg-yellow-500"
                           : "bg-red-500"
-                      }`}
-                    style={{ width: `${parecer.viabilidade * 100}%` }}
-                  />
+                        }`}
+                        style={{ width: `${parecerObj.viabilidade * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {Math.round(parecerObj.viabilidade * 100)}%
+                    </span>
+                  </div>
                 </div>
-                <span className="font-semibold text-gray-900 w-12 text-right">
-                  {Math.round(parecer.viabilidade * 100)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Confiança */}
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Confiança da IA</p>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                  <div
-                    className="h-2 rounded-full bg-indigo-500 transition-all"
-                    style={{ width: `${parecer.confianca * 100}%` }}
-                  />
+              )}
+              {parecerObj.confianca !== undefined && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Confiança IA</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                      <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${parecerObj.confianca * 100}%` }} />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {Math.round(parecerObj.confianca * 100)}%
+                    </span>
+                  </div>
                 </div>
-                <span className="font-semibold text-gray-900 w-12 text-right">
-                  {Math.round(parecer.confianca * 100)}%
-                </span>
-              </div>
+              )}
+              {parecerObj.recomendacao && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Recomendação</p>
+                  <span className={`inline-block text-xs px-2 py-1 rounded font-medium ${
+                    parecerObj.recomendacao === "responder" ? "bg-green-100 text-green-800"
+                    : parecerObj.recomendacao === "nao_responder" ? "bg-red-100 text-red-800"
+                    : "bg-yellow-100 text-yellow-800"
+                  }`}>
+                    {parecerObj.recomendacao === "responder" ? "Responder"
+                      : parecerObj.recomendacao === "nao_responder" ? "Não Responder"
+                      : "Acompanhar"}
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
-          {/* Recomendação */}
-          <div
-            className={`p-4 rounded-lg font-medium text-lg ${parecer.recomendacao === "responder"
-                ? "bg-green-50 text-green-900 border border-green-200"
-                : parecer.recomendacao === "nao_responder"
-                  ? "bg-red-50 text-red-900 border border-red-200"
-                  : "bg-yellow-50 text-yellow-900 border border-yellow-200"
-              }`}
-          >
-            {parecer.recomendacao === "responder"
-              ? "✓ RECOMENDADO RESPONDER"
-              : parecer.recomendacao === "nao_responder"
-                ? "✗ NÃO RECOMENDADO RESPONDER"
-                : "⏳ ACOMPANHAR SITUAÇÃO"}
-          </div>
-
-          {/* Argumentos */}
-          {parecer.argumentos && parecer.argumentos.length > 0 && (
-            <div>
-              <p className="font-semibold text-gray-900 mb-3">Argumentos Principais</p>
-              <ul className="space-y-2">
-                {parecer.argumentos.map((arg, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="text-green-600 font-bold flex-shrink-0">✓</span>
-                    <span className="text-gray-700">{arg}</span>
+          {parecerObj?.argumentos && parecerObj.argumentos.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Argumentos</p>
+              <ul className="space-y-1">
+                {parecerObj.argumentos.map((arg: string, i: number) => (
+                  <li key={i} className="flex gap-2 text-sm text-gray-700">
+                    <span className="text-green-500 flex-shrink-0 mt-0.5">✓</span>
+                    {arg}
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* Parecer Completo */}
-          <div className="pt-4 border-t border-gray-200">
-            <p className="font-semibold text-gray-900 mb-3">Parecer Completo</p>
-            <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap max-h-64 overflow-y-auto border border-gray-200">
-              {parecer.parecer}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Dossiê Viewer */}
-      <DossieViewer markdown={meta.dossieMD} title={meta.dossieTitulo} />
-
-      {/* Shopify Data (se existe) */}
-      {meta.shopifyData && (
-        <div className="card p-6 border-l-4 border-l-purple-500 space-y-4">
-          <h2 className="text-xl font-bold text-gray-900">🛒 Dados Shopify Enriquecidos</h2>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">ID do Pedido</p>
-              <p className="font-semibold text-gray-900">{meta.shopifyData.orderId}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Status de Fulfillment</p>
-              <p className="font-semibold text-gray-900 capitalize">
-                {meta.shopifyData.fulfillmentStatus}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Status Financeiro</p>
-              <p className="font-semibold text-gray-900 capitalize">
-                {meta.shopifyData.financialStatus}
-              </p>
-            </div>
-            {meta.shopifyData.trackingInfo && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Rastreio</p>
-                <p className="font-semibold text-gray-900">
-                  {meta.shopifyData.trackingInfo.number}
-                </p>
-                <p className="text-xs text-gray-600">
-                  {meta.shopifyData.trackingInfo.company}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Dados Cliente */}
-      <div className="card p-6 space-y-4">
-        <h2 className="text-xl font-bold text-gray-900">👤 Dados do Cliente</h2>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-600 mb-1">Nome</p>
-            <p className="font-semibold text-gray-900">{defesa.formulario.nomeCliente}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 mb-1">Email</p>
-            <p className="font-semibold text-gray-900">{defesa.formulario.emailCliente}</p>
-          </div>
-          {defesa.formulario.cpfCliente && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">CPF</p>
-              <p className="font-semibold text-gray-900">{defesa.formulario.cpfCliente}</p>
-            </div>
-          )}
-          {defesa.formulario.ipComprador && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">IP do Comprador</p>
-              <p className="font-semibold text-gray-900">{defesa.formulario.ipComprador}</p>
+          {parecerText && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
+              {parecerText}
             </div>
           )}
         </div>
+      )}
 
-        {defesa.formulario.enderecoEntrega && (
-          <div>
-            <p className="text-sm text-gray-600 mb-1">Endereço de Entrega</p>
-            <p className="text-gray-900">{defesa.formulario.enderecoEntrega}</p>
-          </div>
+      {/* ── Dossiê ────────────────────────────────────────────────────── */}
+      <DossieViewer markdown={defesa.dossie} title="Dossiê de Contestação" />
+
+      {/* ── Ações ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 pt-4 border-t border-gray-200">
+        <Link href="/defesas" className="btn-secondary">← Voltar</Link>
+
+        {canApprove ? (
+          <button
+            onClick={() => setShowApprovalModal(true)}
+            disabled={approving}
+            className="btn-primary flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+            </svg>
+            Enviar para Pagar.me
+          </button>
+        ) : (
+          <p className="text-sm text-gray-500">
+            Defesa {defesa.status === "submitted" ? "enviada" : defesa.status}.
+            {defesa.submittedAt && ` Enviada em ${new Date(defesa.submittedAt).toLocaleDateString("pt-BR")}.`}
+          </p>
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center justify-between gap-4 pt-6 border-t border-gray-200">
-        <Link href="/defesas" className="btn-secondary">
-          ← Voltar
-        </Link>
-
-        {canApprove && (
-          <div className="flex gap-3">
-            <button className="btn-secondary">
-              👁️ Revisar Modificações
-            </button>
-            <button
-              onClick={() => setShowApprovalModal(true)}
-              disabled={approving}
-              className="btn-primary flex items-center gap-2"
-            >
-              {approving ? (
-                <>
-                  <svg
-                    className="animate-spin w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8H4z"
-                    />
-                  </svg>
-                  Enviando...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
-                  </svg>
-                  Enviar para Pagar.me
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-        {!canApprove && (
-          <div className="text-center">
-            <p className="text-sm text-gray-600 mb-2">
-              Esta defesa já foi {meta.status === "submitted" ? "enviada" : meta.status}.
-            </p>
-            <p className="text-xs text-gray-500">Você pode revisar o conteúdo acima.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Approval Modal */}
       <ApprovalModal
         isOpen={showApprovalModal}
         defesaId={defesa.id}
-        chargebackId={meta.chargebackId}
+        chargebackId={defesa.chargeback.externalId ?? defesa.chargebackId}
         onConfirm={handleApprove}
         onCancel={() => setShowApprovalModal(false)}
         isLoading={approving}
