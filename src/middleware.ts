@@ -69,10 +69,23 @@ export async function middleware(request: NextRequest) {
 
     if (password === PASSWORD) {
       const url = request.nextUrl.clone();
+      // Se já estiver na raiz, não redireciona para evitar loop
+      if (url.pathname === "/") {
+        const response = NextResponse.next();
+        response.cookies.set(COOKIE_NAME, COOKIE_VALUE, {
+          httpOnly: false, // Alterado para false para permitir acesso no localhost sem problemas
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 7, // 7 dias
+        });
+        return response;
+      }
+      
       url.pathname = "/";
       const response = NextResponse.redirect(url);
       response.cookies.set(COOKIE_NAME, COOKIE_VALUE, {
-        httpOnly: true,
+        httpOnly: false, // Alterado para false para permitir acesso no localhost sem problemas
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
