@@ -1,4 +1,4 @@
-import prisma from "@/lib/db";
+import { prisma } from "@/lib/db";
 import { getShopifyAPI } from "@/lib/shopify";
 
 export async function POST(request: Request) {
@@ -64,8 +64,8 @@ export async function POST(request: Request) {
     const addr = order.customer?.defaultAddress;
     const enderecoFormatado = addr
       ? [addr.address1, addr.address2, addr.city, addr.province, addr.zip, addr.country]
-          .filter(Boolean)
-          .join(", ")
+        .filter(Boolean)
+        .join(", ")
       : null;
 
     // Montar itens como JSON

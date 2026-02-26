@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "db:push": "prisma db push",
     "start": "next start"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
     "@prisma/adapter-better-sqlite3": "^7.4.1",
-    "@vercel/blob": "^2.3.0",
     "better-sqlite3": "^12.6.2",
     "docx": "^9.0.2",
     "next": "^15.1.0",

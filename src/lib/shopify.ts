@@ -45,6 +45,12 @@ export interface ShopifyFulfillment {
   }>;
 }
 
+export interface ShopifyRefund {
+  id: string;
+  createdAt: string;
+  totalAmount: number; // em centavos
+}
+
 export interface ShopifyOrder {
   id: string;
   name: string;
@@ -62,6 +68,9 @@ export interface ShopifyOrder {
   financialStatus: "authorized" | "pending" | "paid" | "partially_paid" | "refunded" | "voided" | "partially_refunded" | "any" | "authorized" | "pending";
   fulfillmentStatus: "fulfilled" | "partial" | "restocked" | "pending" | "scheduled" | "on_demand" | null;
   tags: string[];
+  customAttributes: Array<{ key: string; value: string }>;
+  note: string | null;
+  refunds: ShopifyRefund[];
 }
 
 export class ShopifyAPI {
@@ -201,6 +210,20 @@ export class ShopifyAPI {
                 displayFinancialStatus
                 displayFulfillmentStatus
                 tags
+                customAttributes {
+                  key
+                  value
+                }
+                note
+                refunds(first: 5) {
+                  id
+                  createdAt
+                  totalRefundedSet {
+                    shopMoney {
+                      amount
+                    }
+                  }
+                }
               }
             }
           }
@@ -318,6 +341,20 @@ export class ShopifyAPI {
                 displayFinancialStatus
                 displayFulfillmentStatus
                 tags
+                customAttributes {
+                  key
+                  value
+                }
+                note
+                refunds(first: 5) {
+                  id
+                  createdAt
+                  totalRefundedSet {
+                    shopMoney {
+                      amount
+                    }
+                  }
+                }
               }
             }
           }
@@ -388,7 +425,36 @@ export class ShopifyAPI {
       financialStatus: (node.displayFinancialStatus ?? node.financialStatus)?.toLowerCase?.() ?? null,
       fulfillmentStatus: (node.displayFulfillmentStatus ?? node.fulfillmentStatus)?.toLowerCase?.() ?? null,
       tags: node.tags || [],
+      customAttributes: node.customAttributes || [],
+      note: node.note || null,
+      refunds: (node.refunds || []).map((r: any) => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        totalAmount: Math.round(parseFloat(r.totalRefundedSet?.shopMoney?.amount ?? "0") * 100),
+      })),
     };
+  }
+
+  /**
+   * Busca a URL da política de reembolso da loja
+   */
+  async getShopRefundPolicyUrl(): Promise<string | null> {
+    try {
+      const query = `
+        query {
+          shop {
+            refundPolicy {
+              url
+            }
+          }
+        }
+      `;
+      const result = await this.request<{ shop: { refundPolicy: { url: string } | null } }>(query);
+      return result.shop?.refundPolicy?.url ?? null;
+    } catch (error) {
+      console.error("[shopify] getShopRefundPolicyUrl:", error);
+      return null;
+    }
   }
 }
 

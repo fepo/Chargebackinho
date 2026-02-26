@@ -1,7 +1,7 @@
 "use server";
 
 import { PagarmeAPI } from "@/lib/pagarme";
-import prisma from "@/lib/db";
+import { prisma } from "@/lib/db";
 
 interface AprovarDefesaRequest {
   defesaId: string;
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     await prisma.chargeback.update({
       where: { externalId: body.chargebackId },
       data: { status: "defending" },
-    }).catch(() => {}); // ignora se não encontrar pelo externalId
+    }).catch(() => { }); // ignora se não encontrar pelo externalId
 
     return Response.json({
       success: true,

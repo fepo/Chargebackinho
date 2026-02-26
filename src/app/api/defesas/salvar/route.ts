@@ -1,7 +1,7 @@
 "use server";
 
 import type { FormContestacao } from "@/types";
-import prisma from "@/lib/db";
+import { prisma } from "@/lib/db";
 
 interface SalvarDefesaRequest {
   contestacaoId: string;

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import prisma from "@/lib/db";
+import { prisma } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {

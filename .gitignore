@@ -10,6 +10,5 @@ node_modules
 
 
 # Copilot memory
-MEMORY.md
 
 /src/generated/prisma

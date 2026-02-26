@@ -28,6 +28,13 @@ export interface Comunicacao {
   descricao: string;
 }
 
+export interface CustomerHistory {
+  totalOrders: number;
+  totalSpent: number; // em centavos
+  firstOrderDate: string | null;
+  lastOrderDate: string | null;
+}
+
 export interface FormContestacao {
   // Dados da contestação
   gateway: Gateway;

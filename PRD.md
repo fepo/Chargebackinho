@@ -85,3 +85,20 @@ Operadores de e-commerce (PT-BR) que lidam com chargebacks recorrentes.
 - Webhook handlers sempre retornam 200 (Pagar.me reenvia em loop)
 - `FormContestacao` (src/types.ts) é contrato compartilhado — qualquer mudança propaga para form, templates, API routes
 - `CACHED_CONTEXT` e `buildPrompt()` não devem ter sua assinatura alterada
+
+## Auth / Local dev
+- A aplicação possui um middleware de proteção simples para o ambiente local: `src/middleware.ts`.
+	- A senha é controlada por `PROTECT_PASSWORD` (variável de ambiente). Exemplo local em `.env.local`: `PROTECT_PASSWORD=LOFIBEATS2026`.
+	- O middleware renderiza uma página de login na primeira visita e define o cookie `auth_token=authenticated` quando a senha é validada.
+	- Observação: por conveniência em desenvolvimento, o cookie `httpOnly` foi temporariamente setado para `false` e o middleware foi ajustado para evitar redirect loops ao submeter a senha na raiz (`/`).
+
+## Deploy / CI
+- O projeto é hospedado na Vercel. Ao conectar o repositório GitHub (`github.com/fepo/Chargebackinho`) ao projeto na Vercel, pushes para a branch `main` disparam builds automáticos.
+- Se o deploy não ocorrer automaticamente, verifique em Settings → Git do projeto na Vercel se o repositório está corretamente ligado e com permissões concedidas ao GitHub App.
+
+## Observações operacionais
+- Em ambiente local, ao usar SQLite (arquivo `dev.db`) assegure que o diretório exista; caso contrário o adapter lança `TypeError: Cannot open database because the directory does not exist`. Para evitar esse erro, crie a pasta ou use `DATABASE_URL` apontando para um Postgres/Neon.
+- Testes manuais recentes:
+	- Commits feitos na branch `main` e empurrados para `origin/main`.
+	- Teste de login: senha `LOFIBEATS2026` funciona; limpar cookies ou usar janela anônima força a tela de login.
+

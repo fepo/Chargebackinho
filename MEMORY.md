@@ -5,7 +5,7 @@
 
 ## Projeto
 - **Nome:** Claudião
-- **Repo:** `github.com/fepo/Claude` (branch `master`)
+- **Repo:** `github.com/fepo/Chargebackinho` (branch `main`)
 - **Deploy:** https://teste-olive-iota.vercel.app (Vercel, projeto `teste`, auto-deploy via push)
 - **Stack:** Next.js 15.5, React 19, TS, Tailwind 3, Prisma 7 + SQLite, Anthropic SDK
 - **Integrações:** Pagar.me v5, Shopify Admin API (2024-10), n8n, Linketrack
@@ -66,6 +66,22 @@ prisma/
 - ✅ Matching Pagar.me↔Shopify por email + valor (com debug info)
 - ✅ GraphQL queries e mapper corrigidos para Shopify API 2024-10
 - ⚠️ `storage.ts` legado ainda usado no form principal (não migrado para DB)
+
+---
+
+## Observações de desenvolvimento (recentes)
+
+- Local dev: existe um erro intermitente ao abrir `/api/pagarme/chargebacks` quando o adaptador SQLite tenta abrir um arquivo em um diretório que não existe. Log: `TypeError: Cannot open database because the directory does not exist` (ver `src/lib/db.ts`). Ambiente local usa `dev.db` quando `DATABASE_URL` não é um Postgres.
+- Autenticação local: adicionado um middleware simples em `src/middleware.ts` que protege a UI com uma senha única (env `PROTECT_PASSWORD`). Cookie de sessão: `auth_token=authenticated`.
+- Fixes recentes no middleware:
+  - `httpOnly` do cookie temporariamente setado para `false` em dev para evitar problemas no localhost.
+  - Evita redirect loop ao submeter a senha na rota `/` — agora, se a requisição já estiver na raiz, o middleware define o cookie e continua (usa `NextResponse.next()`), em vez de redirecionar para `/` novamente.
+- Como reproduzir o fluxo de login:
+  1. Rode `npm run dev`.
+  2. Acesse `http://localhost:3000` em janela anônima — verá a tela "Acesso restrito".
+  3. Insira a senha definida em `.env.local` (`PROTECT_PASSWORD`, valor atual: `LOFIBEATS2026`).
+  4. Ao enviar, o middleware define o cookie `auth_token` e permite acesso às rotas protegidas.
+- Dica: se aparecer `ERR_TOO_MANY_REDIRECTS`, abra em janela anônima e tente novamente (ou reinicie o servidor). O redirect loop foi corrigido.
 
 ---
 

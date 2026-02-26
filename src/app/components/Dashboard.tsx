@@ -150,68 +150,17 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
       </div>
 
       {/* ── Stats cards ────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          {
-            label: "Total Recebido",
-            value: total,
-            sub: "chargebacks",
-            color: "text-gray-900",
-            bg: "bg-white",
-            icon: (
-              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            ),
-          },
-          {
-            label: "Valor em Risco",
-            value: formatCurrency(totalAmount),
-            sub: "em disputa",
-            color: "text-red-600",
-            bg: "bg-white",
-            icon: (
-              <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            ),
-          },
-          {
-            label: "Aguardando",
-            value: pending,
-            sub: "precisam de resposta",
-            color: "text-amber-600",
-            bg: "bg-amber-50",
-            icon: (
-              <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            ),
-          },
-          {
-            label: "Ganhos",
-            value: won,
-            sub: "chargebacks vencidos",
-            color: "text-green-600",
-            bg: "bg-green-50",
-            icon: (
-              <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            ),
-          },
+          { label: "Total", value: total, color: "text-gray-900", accent: "bg-gray-500" },
+          { label: "Em risco", value: formatCurrency(totalAmount), color: "text-red-600", accent: "bg-red-500" },
+          { label: "Aguardando", value: pending, color: "text-amber-600", accent: "bg-amber-500" },
+          { label: "Ganhos", value: won, color: "text-green-600", accent: "bg-green-500" },
         ].map((s, i) => (
-          <div key={i} className={`${s.bg} border border-gray-200 rounded-xl p-4`}>
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{s.label}</p>
-              {s.icon}
-            </div>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-gray-400 mt-1">{s.sub}</p>
+          <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 relative overflow-hidden">
+            <div className={`absolute top-0 left-0 w-1 h-full ${s.accent}`} />
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{s.label}</p>
+            <p className={`text-xl font-bold ${s.color} tabular-nums`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -334,91 +283,76 @@ export default function Dashboard({ onSelectChargeback, onNewManual }: Dashboard
             const avatarColor = colors[cb.id.charCodeAt(0) % colors.length];
 
             return (
-              <div key={cb.id} className="p-4 hover:bg-gray-50 transition-colors group">
-                <div className="flex items-center gap-4">
+              <div key={cb.id} className="px-5 py-4 hover:bg-gray-50/80 transition-colors group">
+                <div className="flex items-start gap-4">
                   {/* Avatar */}
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${avatarColor}`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5 ${avatarColor}`}>
                     {initials}
                   </div>
 
                   {/* Main info */}
                   <div className="flex-1 min-w-0">
+                    {/* Row 1: Nome + Status + Razão */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900 text-sm">
+                      <span className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">
                         {cb.customerName || "Cliente desconhecido"}
                       </span>
                       <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${st.bg} ${st.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
                         {st.label}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      {cb.customerEmail && (
-                        <span className="text-xs text-gray-400">{cb.customerEmail}</span>
-                      )}
-                      {cb.orderId && (
-                        <span className="text-xs text-gray-400">Pedido #{cb.orderId}</span>
-                      )}
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-400 font-mono">{cb.id.slice(0, 16)}…</span>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-400">{timeAgo(cb.createdAt)}</span>
-                    </div>
-
-                    {/* Dados enriquecidos da Shopify */}
-                    {cb.shopifyOrderName && (
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <span className="text-xs text-gray-500">Shopify:</span>
-                        <span className="text-xs font-medium text-gray-700">{cb.shopifyOrderName}</span>
-                        {cb.shopifyFulfillmentStatus === "fulfilled" && (
-                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                            Entregue
-                          </span>
-                        )}
-                        {cb.shopifyFulfillmentStatus === "partial" && (
-                          <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
-                            Parcial
-                          </span>
-                        )}
-                        {cb.shopifyTrackingNumber && (
-                          <>
-                            <span className="text-xs text-gray-300">·</span>
-                            {cb.shopifyTrackingUrl ? (
-                              <a
-                                href={cb.shopifyTrackingUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:underline font-mono"
-                              >
-                                {cb.shopifyTrackingNumber}
-                              </a>
-                            ) : (
-                              <span className="text-xs text-gray-600 font-mono">{cb.shopifyTrackingNumber}</span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="mt-1">
-                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
+                      <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
                         {REASON_LABELS[cb.reason] ?? cb.reason}
                       </span>
+                    </div>
+
+                    {/* Row 2: Metadata compacta */}
+                    <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
+                      {cb.customerEmail && (
+                        <span className="truncate max-w-[180px]">{cb.customerEmail}</span>
+                      )}
+                      {cb.customerEmail && (cb.orderId || cb.shopifyOrderName) && (
+                        <span className="text-gray-300">·</span>
+                      )}
+                      {cb.shopifyOrderName ? (
+                        <span className="text-gray-600 font-medium">{cb.shopifyOrderName}</span>
+                      ) : cb.orderId ? (
+                        <span>Pedido #{cb.orderId}</span>
+                      ) : null}
+                      {cb.shopifyFulfillmentStatus === "fulfilled" && (
+                        <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-xs font-medium">Entregue</span>
+                      )}
+                      {cb.shopifyFulfillmentStatus === "partial" && (
+                        <span className="px-1.5 py-0.5 bg-yellow-50 text-yellow-600 rounded text-xs font-medium">Parcial</span>
+                      )}
+                      {cb.shopifyTrackingNumber && (
+                        <>
+                          <span className="text-gray-300">·</span>
+                          {cb.shopifyTrackingUrl ? (
+                            <a href={cb.shopifyTrackingUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline font-mono">
+                              {cb.shopifyTrackingNumber}
+                            </a>
+                          ) : (
+                            <span className="font-mono text-gray-500">{cb.shopifyTrackingNumber}</span>
+                          )}
+                        </>
+                      )}
+                      <span className="text-gray-300">·</span>
+                      <span>{timeAgo(cb.createdAt)}</span>
                     </div>
                   </div>
 
                   {/* Amount + Action */}
                   <div className="flex-shrink-0 flex items-center gap-3">
                     <div className="text-right">
-                      <p className="font-bold text-red-600 text-base">{formatCurrency(cb.amount)}</p>
-                      <p className="text-xs text-gray-400">em disputa</p>
+                      <p className="font-bold text-red-600 text-sm tabular-nums">{formatCurrency(cb.amount)}</p>
                     </div>
                     <button
                       onClick={() => {
                         sessionStorage.setItem(`cb_analyze_${cb.id}`, JSON.stringify(cb));
                         router.push(`/analisar/${cb.id}`);
                       }}
-                      className="opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap"
+                      className="flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors shadow-sm"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />

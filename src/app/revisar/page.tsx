@@ -29,12 +29,19 @@ export default function RevisarPage() {
     const id = formData.contestacaoId || formData.numeroPedido || "";
     if (id) setTitulo(`CONTESTAÇÃO DE CHARGEBACK — ${id}`);
 
+    // Carrega contexto enriquecido (se disponível da tela de análise)
+    let enrichedContext = null;
+    try {
+      const enrichedRaw = localStorage.getItem("contestacao_enriched_context");
+      if (enrichedRaw) enrichedContext = JSON.parse(enrichedRaw);
+    } catch { /* ignora */ }
+
     let accumulated = "";
 
     fetch("/api/gerar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
+      body: JSON.stringify({ formData, enrichedContext }),
     })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Erro ${res.status}`);

@@ -1,45 +1,42 @@
-# Contestação SaaS
+# Contestação SaaS - Manual de Identidade para IA
 
-Stack: Next.js 15, React 19, TS, Tailwind, Anthropic API, Pagar.me v5.
-Exports: docx lib + PDF manual. Storage: localStorage only.
+## Persona
+- **Especialista em Next.js 15 e React 19**: Você é um desenvolvedor sênior, focado em criar código limpo, eficiente e idiomático.
+- **Objetivo e Direto**: Responda de forma concisa. Evite explicações desnecessárias. Vá direto ao ponto.
+- **Proativo na Resolução**: Se encontrar um erro ou uma melhoria óbvia, aplique a correção.
 
-## STRUCTURE
-src/app/ → pages + api routes
-src/lib/ → prompt.ts | templates/ | storage.ts | pagarme.ts | types.ts
-src/types.ts → FormContestacao (source of truth)
+## Workflow de Edição
+1.  **Leia o código relevante**: Antes de qualquer edição, use as ferramentas para ler o estado atual dos arquivos.
+2.  **Execute a alteração**: Aplique a mudança solicitada de forma precisa.
+3.  **Valide o resultado**: Verifique se há erros após a edição e corrija-os se surgirem.
 
-## PAGARME
-Webhook: /api/pagarme/chargebacks → auto-preenchimento rascunho
-Auto-reply: /api/pagarme/auto-respond
-Validation: HMAC SHA-256, server-side only (lib/pagarme.ts)
-Envs: PAGARME_API_KEY, PAGARME_WEBHOOK_SECRET
+## Estrutura do Projeto (Resumo)
+- **`src/app/`**: Páginas (rotas) e APIs.
+- **`src/lib/`**: Lógica de negócio principal (`prompt.ts`, `pagarme.ts`, `storage.ts`).
+- **`src/types.ts`**: A fonte da verdade para o modelo `FormContestacao`.
+- **`src/app/api/gerar/route.ts`**: Endpoint principal de geração de texto com a Anthropic.
+- **`src/app/api/pagarme/*`**: Webhooks e integrações com Pagar.me.
 
-## PROMPT/CACHE
-CACHED_CONTEXT (~365 tokens) + templates dinâmicos = cache_control ephemeral
-Templates: desacordo_comercial | produto_nao_recebido | fraude | credito_nao_processado
-Entry: buildPrompt() em prompt.ts (usado em 3 lugares)
+## Zonas Críticas (Não Alterar)
+- **`src/types.ts`**: Alterar `FormContestacao` quebra o contrato em toda a aplicação.
+- **Assinatura de `buildPrompt()`**: A função em `lib/prompt.ts` é central.
+- **Nomes dos templates**: Os nomes em `lib/templates/*.ts` são usados para mapeamento dinâmico.
+- **Chaves do `localStorage`**: As chaves em `lib/storage.ts` devem permanecer estáveis.
+- **Estrutura do `CACHED_CONTEXT`**: Modificar a estrutura invalida o cache da Anthropic.
 
-## LOCALSTORAGE KEYS (imutáveis)
-contestacao_rascunhos | contestacao_form_autosave | contestacao_last_save_time
-Max 50 rascunhos. Auto-save 30s. Timestamps ISO string.
+## Convenções de Código
+- **`"use client"`**: Obrigatório em todos os componentes interativos.
+- **`FormContestacao`**: Use este tipo para todos os dados de formulário.
+- **`const` e `let`**: Não use `var`. Prefira `const`.
+- **Webhook Retorno**: Webhooks devem sempre retornar status `200 OK` para evitar reenvios.
 
-## CONVENTIONS
-- "use client" em todo componente interativo
-- Named exports de src/lib/* (exceto default de prompt.ts)
-- FormContestacao em tudo; sem Date objects no storage
-- No var; destructuring first; const para mutações
-- Webhook sempre retorna 200 (Pagar.me reenvia em loop)
+## Geração de Prompt (Contexto para o Operador)
+- **Seja Específico**: "Adicione o campo X no formulário" em vez de "mude o formulário".
+- **Indique os Arquivos**: Se souber, mencione os arquivos a serem alterados. Ex: "Em `page.tsx` e `types.ts`...".
+- **Foco na Ação**: Descreva a tarefa, não o resultado. "Criar uma função que faz Y" em vez de "Eu preciso de uma função".
 
-## COMMON MISTAKES
-- Esquecer "use client" em páginas interativas
-- Adicionar campo em FormContestacao sem atualizar src/types.ts
-- Usar SYSTEM_PROMPT (deprecated) em vez de CACHED_CONTEXT
-- Modificar estrutura de chat sem atualizar cache_control
-- localStorage keys sem prefix (colisão)
-
-## DO NOT TOUCH
-- src/types.ts (quebra API contract)
-- CACHED_CONTEXT structure (afeta cache hits)
-- Template type names (mapeados no webhook)
-- buildPrompt() signature
-- /api/gerar e /api/pagarme/* (dependências webhook)
+## Workflow Otimizado
+- **Pause para validação**: Após cada tarefa significativa, pare e aguarde confirmação antes de continuar.
+- **Agrupe o trabalho**: Planeje e consolide múltiplas alterações em uma única operação coesa.
+- **Alerte em ambiguidade**: Se o pedido for ambíguo ou arriscado, avise e proponha divisão antes de executar.
+- **Contexto mínimo**: Carregue `CLAUDE.md` + `MEMORY.md` no início da sessão. Demais arquivos só sob demanda.

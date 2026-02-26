@@ -2,6 +2,8 @@ import { getShopifyAPI } from "@/lib/shopify";
 import type { ShopifyOrder } from "@/lib/shopify";
 import type { FormContestacao, EventoRastreio } from "@/types";
 import { fetchTrackingEvents } from "@/lib/tracking";
+import { getPagarmeAPI } from "@/lib/pagarme";
+import { buildEnrichedContext, type EnrichedContext } from "@/lib/enrichment";
 
 interface GenerarDefesaRequest {
   chargebackId: string;
@@ -50,9 +52,11 @@ export async function POST(req: Request) {
   try {
     const {
       chargebackId,
+      chargeId,
       orderId,
       customerEmail,
       amount,
+      reason,
       rascunho,
     }: GenerarDefesaRequest = await req.json();
 
@@ -64,10 +68,14 @@ export async function POST(req: Request) {
       { name: "Pagar.me", status: "success", message: "Dados carregados" },
       { name: "Shopify", status: "loading", message: "Buscando pedido..." },
       { name: "Correios / Transportadora", status: "pending", message: "Aguardando..." },
+      { name: "Enriquecimento", status: "pending", message: "Aguardando dados..." },
     ];
 
-    let shopifyOrder = null;
+    let shopifyOrder: ShopifyOrder | null = null;
+    let allShopifyOrders: ShopifyOrder[] = [];
     let trackingEvents: EventoRastreio[] = [];
+    let rawCharge: any = null;
+    let shopRefundPolicyUrl: string | null = null;
 
     // ── Step 2: Buscar na Shopify ────
     try {
@@ -75,23 +83,33 @@ export async function POST(req: Request) {
       if (shopifyAPI) {
         console.log(`[gerar-defesa] email=${customerEmail} | amount=${amount} | numeroPedido=${rascunho?.numeroPedido}`);
 
-        // 1. numeroPedido parece nome Shopify (#1001 ou 1001)?
+        // Busca pedido e política de reembolso da loja em paralelo
         const isShopifyName = (v?: string | null) => /^#?\d+$/.test((v ?? "").trim());
-        if (isShopifyName(rascunho?.numeroPedido)) {
-          shopifyOrder = await shopifyAPI.getOrderByName(rascunho!.numeroPedido!);
-        }
 
-        // 2. Fallback: busca por email + filtro por valor + data
-        if (!shopifyOrder && customerEmail) {
+        const [orderByName, policyUrl] = await Promise.all([
+          isShopifyName(rascunho?.numeroPedido)
+            ? shopifyAPI.getOrderByName(rascunho!.numeroPedido!)
+            : Promise.resolve(null),
+          shopifyAPI.getShopRefundPolicyUrl().catch(() => null),
+        ]);
+
+        shopifyOrder = orderByName;
+        shopRefundPolicyUrl = policyUrl;
+
+        // Busca por email para histórico e match de valor/data
+        if (customerEmail) {
           const candidates = await shopifyAPI.getOrdersByEmail(customerEmail);
+          allShopifyOrders = candidates;
           console.log(`[gerar-defesa] candidatos por email=${candidates.length}`);
-          shopifyOrder = findBestMatch(candidates, amount, rascunho?.dataTransacao ?? undefined);
-          if (shopifyOrder && candidates.length > 1) {
-            const byAmount = candidates.filter((o) => {
-              const price = parseFloat(o.totalPrice);
-              return Math.abs(price - amount) / amount <= 0.02;
-            });
-            console.log(`[gerar-defesa] match por valor=${byAmount.length} | selecionado=${shopifyOrder.name}`);
+          if (!shopifyOrder) {
+            shopifyOrder = findBestMatch(candidates, amount, rascunho?.dataTransacao ?? undefined);
+            if (shopifyOrder && candidates.length > 1) {
+              const byAmount = candidates.filter((o) => {
+                const price = parseFloat(o.totalPrice);
+                return Math.abs(price - amount) / amount <= 0.02;
+              });
+              console.log(`[gerar-defesa] match por valor=${byAmount.length} | selecionado=${shopifyOrder.name}`);
+            }
           }
         }
 
@@ -154,7 +172,7 @@ export async function POST(req: Request) {
       emailEmpresa: rascunho?.emailEmpresa || "",
       telefoneEmpresa: rascunho?.telefoneEmpresa || "",
       enderecoEmpresa: rascunho?.enderecoEmpresa || "",
-      politicaReembolsoUrl: rascunho?.politicaReembolsoUrl || "",
+      politicaReembolsoUrl: rascunho?.politicaReembolsoUrl || shopRefundPolicyUrl || "",
       // Dados Shopify
       nomeCliente:
         rascunho?.nomeCliente ||
@@ -192,6 +210,49 @@ export async function POST(req: Request) {
       codigoConfirmacao: rascunho?.codigoConfirmacao || "",
     };
 
+    // ── Step 4: Enriquecimento (histórico, autenticação, timeline, Art.49) ──
+    let enrichedContext: EnrichedContext | null = null;
+    try {
+      steps[3].status = "loading" as any;
+      steps[3].message = "Analisando dados...";
+
+      // Busca charge raw da Pagar.me para dados de autenticação
+      if (chargeId) {
+        try {
+          const pagarme = getPagarmeAPI();
+          rawCharge = await pagarme.getCharge(chargeId);
+        } catch (e) {
+          console.warn("[gerar-defesa] Não foi possível buscar charge:", e);
+        }
+      }
+
+      // Computa endereço de faturamento (Pagar.me) e entrega (Shopify)
+      const billingAddr = rawCharge?.billing_address
+        ? `${rawCharge.billing_address.line1 ?? ""}, ${rawCharge.billing_address.city ?? ""}, ${rawCharge.billing_address.state ?? ""}, ${rawCharge.billing_address.zip_code ?? ""}`
+        : enrichedForm.enderecoFaturamento || null;
+
+      enrichedContext = buildEnrichedContext({
+        customerEmail,
+        amount,
+        reason: reason ?? "",
+        chargebackDate: rascunho?.dataContestacao ?? new Date().toISOString().split("T")[0],
+        pagarmeCharge: rawCharge,
+        shopifyOrder,
+        allShopifyOrders,
+        trackingEvents,
+        billingAddress: billingAddr,
+        shippingAddress: enrichedForm.enderecoEntrega || null,
+        shopRefundPolicyUrl,
+      });
+
+      steps[3].status = "success";
+      steps[3].message = `Força: ${enrichedContext.overallStrength === "strong" ? "Forte" : enrichedContext.overallStrength === "moderate" ? "Moderada" : "Fraca"} (${enrichedContext.strengthReasons.length} pontos)`;
+    } catch (err) {
+      console.error("[gerar-defesa] Erro no enriquecimento:", err);
+      steps[3].status = "error";
+      steps[3].message = "Erro ao enriquecer dados";
+    }
+
     return Response.json({
       success: true,
       chargebackId,
@@ -199,6 +260,7 @@ export async function POST(req: Request) {
       shopifyOrder: shopifyOrder ? { name: shopifyOrder.name } : null,
       trackingCount: trackingEvents.length,
       formData: enrichedForm,
+      enrichedContext,
     });
   } catch (error) {
     console.error("Erro em gerar-defesa:", error);

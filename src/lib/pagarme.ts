@@ -201,6 +201,56 @@ export class PagarmeAPI {
   }
 
   /**
+   * Busca pedidos de um cliente pelo email
+   * Fluxo: GET /customers?email → GET /orders?customer_id
+   */
+  async findOrdersByCustomerEmail(email: string): Promise<Order[]> {
+    try {
+      // 1. Localiza o cliente pelo email
+      const customersResp = await this.request<{ data: any[] }>(
+        "GET",
+        `/customers?email=${encodeURIComponent(email)}&size=5`
+      );
+
+      if (!customersResp.data?.length) return [];
+
+      const customerId: string = customersResp.data[0].id;
+
+      // 2. Lista os pedidos do cliente
+      const ordersResp = await this.request<{ data: any[] }>(
+        "GET",
+        `/orders?customer_id=${encodeURIComponent(customerId)}&size=50`
+      );
+
+      if (!ordersResp.data?.length) return [];
+
+      return ordersResp.data.map((o) => ({
+        id: o.id,
+        customerId: o.customer_id,
+        amount: o.amount,
+        status: o.status,
+        chargesCount: o.charges?.length ?? 0,
+        items: o.items ?? [],
+        customer: {
+          id: o.customer?.id ?? customerId,
+          name: o.customer?.name ?? "",
+          email: o.customer?.email ?? email,
+          documentNumber: o.customer?.document ?? "",
+          phoneNumber: o.customer?.phones?.mobile_phone,
+        },
+        billingAddress: o.billing_address,
+        shippingAddress: o.shipping_address,
+        metadata: o.metadata,
+        createdAt: o.created_at,
+        closedAt: o.closed_at,
+      }));
+    } catch (error) {
+      console.error(`[pagarme] findOrdersByCustomerEmail(${email}):`, error);
+      return [];
+    }
+  }
+
+  /**
    * Busca detalhes de um charge (cobrança)
    */
   async getCharge(chargeId: string): Promise<any> {
