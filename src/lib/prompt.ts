@@ -5,29 +5,13 @@ import { getFraudeTemplate } from "./templates/fraude";
 import { getCreditoNaoProcessadoTemplate } from "./templates/credito_nao_processado";
 
 /**
- * CACHED_CONTEXT - ~365 tokens (fixed)
+ * CACHED_CONTEXT
  * Esta seção será cacheada pelo Anthropic API para reutilização entre requisições
- * Inclui: SYSTEM_PROMPT, mapeamentos, estrutura de headers
+ * Inclui: SYSTEM_PROMPT. Mapeamentos removidos para otimizar tokens.
  */
-export const CACHED_CONTEXT = `Você é um especialista jurídico sênior em chargebacks e disputas de pagamento para e-commerce brasileiro. Você tem profundo conhecimento do Código de Defesa do Consumidor (Lei 8.078/1990), do Código Civil Brasileiro, e das políticas específicas de contestação das principais adquirentes e gateways de pagamento.
+export const CACHED_CONTEXT = `Você é um especialista jurídico sênior em chargebacks e disputas de pagamento para e-commerce brasileiro. Você tem profundo conhecimento do Código de Defesa do Consumidor (Lei 8.078/1990), do Código Civil Brasileiro, e das políticas específicas de contestação das principais adquirentes e gateways de pagamento (Pagar.me, Shopify, etc).
 
-Você redige contestações técnicas, persuasivas e juridicamente embasadas que maximizam as chances de reversão do chargeback. Sempre use linguagem formal, estrutura clara e argumentação sólida baseada nas evidências apresentadas.
-
-=== MAPEAMENTOS PADRÃO ===
-
-GATEWAYS:
-- pagarme: "Pagar.me"
-- shopify: "Shopify Payments"
-- cielo: "Cielo"
-- stone: "Stone"
-- rede: "Rede"
-- generico: "Adquirente"
-
-TIPOS DE CONTESTAÇÃO:
-- desacordo_comercial: "Desacordo Comercial"
-- produto_nao_recebido: "Produto/Serviço Não Recebido"
-- fraude: "Fraude"
-- credito_nao_processado: "Crédito Não Processado"`;
+Você redige contestações técnicas, persuasivas e juridicamente embasadas que maximizam as chances de reversão do chargeback. O formato deve ser claro, utilizando os dados fornecidos pelo sistema. Use linguagem formal e argumentação baseada em evidências.`;
 
 /**
  * SYSTEM_PROMPT - Para chamadas sem cache (fallback)
@@ -72,14 +56,11 @@ export function buildPrompt(data: FormContestacao): string {
 
   // Retorna prompt final que será enviado ao Claude
   // O cache_control será aplicado no client (src/app/api/gerar/route.ts)
-  return `${CACHED_CONTEXT}
-
-=== TEMPLATE ESPECÍFICO POR TIPO ===
+  return `=== INSTRUÇÕES ESPECÍFICAS DA CONTESTAÇÃO ===
 
 ${template}
 
-=== REDAÇÃO FINAL ===
-Com base nos dados acima, redija a contestação técnica e jurídica completa.`;
+Com base nestes dados e seu papel de especialista jurídico, redija a contestação completa de forma clara, argumentativa e técnica.`;
 }
 
 /**

@@ -21,10 +21,8 @@ export async function POST(req: Request) {
     : "";
 
   const stream = client.messages.stream({
-    model: "claude-opus-4-6",
-    max_tokens: 8000,
-    // @ts-expect-error adaptive thinking supported at runtime on claude-opus-4-6
-    thinking: { type: "adaptive" },
+    model: process.env.CLAUDE_LEGAL_MODEL || "claude-3-5-sonnet-20241022",
+    max_tokens: 4000,
     system: [
       {
         type: "text",

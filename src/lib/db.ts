@@ -11,27 +11,37 @@ function createPrismaClient() {
   }
 
   const resolvedUrl = databaseUrl ?? "file:./dev.db";
-  const dbPath = resolvedUrl.replace("file:", "");
-  const sqlite = new Database(path.resolve(process.cwd(), dbPath));
-  const adapter = new PrismaBetterSqlite3({ url: dbPath } as any);
+  let dbPath = resolvedUrl.replace("file:", "");
+  let absolutePath = path.resolve(process.cwd(), dbPath);
+
+  // No build do Next, o DB dev.db pode não existir no root
+  try {
+    const fs = require("fs");
+    const dir = path.dirname(absolutePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (e) { }
+
+  const sqlite = new Database(absolutePath);
+  const adapter = new PrismaBetterSqlite3({ url: absolutePath } as any);
   void sqlite; // adapter manages the connection
   return new PrismaClient({ adapter } as any);
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-/** Lazy singleton — só cria a conexão no primeiro acesso real, não no import */
-function getPrisma(): PrismaClient {
+let prisma: PrismaClient;
+
+if (process.env.NODE_ENV === "production" && process.env.DATABASE_URL) {
+  // Em produção DE FATO (Vercel + Neon Postgres)
+  prisma = createPrismaClient();
+} else {
+  // Desenvolvimento ou Produção sem DATABASE_URL (fallback para SQLite)
   if (!globalForPrisma.prisma) {
     globalForPrisma.prisma = createPrismaClient();
   }
-  return globalForPrisma.prisma;
+  prisma = globalForPrisma.prisma;
 }
 
-export const prisma = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    return (getPrisma() as any)[prop];
-  },
-});
-
-export default prisma;
+export { prisma };

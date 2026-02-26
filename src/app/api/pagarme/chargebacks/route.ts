@@ -3,7 +3,7 @@ import { getShopifyAPI } from "@/lib/shopify";
 import type { FormContestacao } from "@/types";
 import type { ShopifyOrder } from "@/lib/shopify";
 import crypto from "crypto";
-import prisma from "@/lib/db";
+import { prisma } from "@/lib/db";
 
 /**
  * Encontra o melhor match entre pedidos Shopify baseado em valor e data
@@ -153,8 +153,8 @@ export async function POST(req: Request) {
       emailCliente: orderData?.customer?.email || chargeData?.customer?.email || "",
       enderecoEntrega: shopifyOrder?.customer?.defaultAddress
         ? [shopifyOrder.customer.defaultAddress.address1, shopifyOrder.customer.defaultAddress.city, shopifyOrder.customer.defaultAddress.zip]
-            .filter(Boolean)
-            .join(", ")
+          .filter(Boolean)
+          .join(", ")
         : fmtEndereco(orderData?.shippingAddress),
       enderecoFaturamento: fmtEndereco(orderData?.billingAddress),
       ipComprador: "",
@@ -233,11 +233,11 @@ export async function POST(req: Request) {
 // os campos do Prisma para o formato esperado pelo componente Dashboard.
 
 const STATUS_MAP: Record<string, string> = {
-  pending:   "opened",
+  pending: "opened",
   defending: "submitted",
-  won:       "won",
-  lost:      "lost",
-  closed:    "lost",
+  won: "won",
+  lost: "lost",
+  closed: "lost",
 };
 
 export async function GET() {
@@ -258,52 +258,52 @@ export async function GET() {
     const trackingInfo = firstFulfillment?.trackingInfo;
 
     return {
-      id:           cb.id,
-      chargeId:     cb.chargeId,
-      status:       STATUS_MAP[cb.status] ?? "opened",
-      amount:       parseFloat(cb.valorTransacao ?? "0") || 0,
-      reason:       cb.reason ?? "",
-      createdAt:    cb.createdAt,
-      orderId:      cb.numeroPedido ?? null,
-      customerName: cb.nomeCliente  ?? "Desconhecido",
-      customerEmail:cb.emailCliente ?? "",
+      id: cb.id,
+      chargeId: cb.chargeId,
+      status: STATUS_MAP[cb.status] ?? "opened",
+      amount: parseFloat(cb.valorTransacao ?? "0") || 0,
+      reason: cb.reason ?? "",
+      createdAt: cb.createdAt,
+      orderId: cb.numeroPedido ?? null,
+      customerName: cb.nomeCliente ?? "Desconhecido",
+      customerEmail: cb.emailCliente ?? "",
       // Dados Shopify extraídos do JSON
-      shopifyOrderName:        shopify?.name             ?? null,
-      shopifyFulfillmentStatus:shopify?.fulfillmentStatus ?? null,
-      shopifyTrackingNumber:   trackingInfo?.number       ?? null,
-      shopifyTrackingCompany:  trackingInfo?.company      ?? null,
-      shopifyTrackingUrl:      trackingInfo?.url          ?? null,
+      shopifyOrderName: shopify?.name ?? null,
+      shopifyFulfillmentStatus: shopify?.fulfillmentStatus ?? null,
+      shopifyTrackingNumber: trackingInfo?.number ?? null,
+      shopifyTrackingCompany: trackingInfo?.company ?? null,
+      shopifyTrackingUrl: trackingInfo?.url ?? null,
       // Rascunho para uso no /analisar
       rascunho: cb.itensPedido
         ? {
-            gateway:         cb.gateway,
-            contestacaoId:   cb.externalId ?? cb.id,
-            tipoContestacao: cb.tipoContestacao ?? "desacordo_comercial",
-            valorTransacao:  cb.valorTransacao  ?? "0",
-            bandeira:        cb.bandeira         ?? "",
-            finalCartao:     cb.finalCartao      ?? "",
-            dataTransacao:   cb.dataTransacao    ?? "",
-            dataContestacao: cb.createdAt.toISOString().split("T")[0],
-            numeroPedido:    cb.numeroPedido     ?? "",
-            nomeCliente:     cb.nomeCliente      ?? "",
-            cpfCliente:      cb.cpfCliente       ?? "",
-            emailCliente:    cb.emailCliente     ?? "",
-            enderecoEntrega: cb.enderecoEntrega  ?? "",
-            itensPedido:     JSON.parse(cb.itensPedido ?? "[]"),
-            eventosRastreio: JSON.parse(cb.eventosRastreio ?? "[]"),
-            comunicacoes:    JSON.parse(cb.comunicacoes    ?? "[]"),
-            codigoConfirmacao: cb.chargeId ?? "",
-            codigoRastreio:  cb.codigoRastreio ?? "",
-            transportadora:  cb.transportadora  ?? "",
-            enderecoFaturamento: "",
-            ipComprador:     "",
-            nomeEmpresa:     "",
-            cnpjEmpresa:     "",
-            emailEmpresa:    "",
-            telefoneEmpresa: "",
-            enderecoEmpresa: "",
-            politicaReembolsoUrl: "",
-          }
+          gateway: cb.gateway,
+          contestacaoId: cb.externalId ?? cb.id,
+          tipoContestacao: cb.tipoContestacao ?? "desacordo_comercial",
+          valorTransacao: cb.valorTransacao ?? "0",
+          bandeira: cb.bandeira ?? "",
+          finalCartao: cb.finalCartao ?? "",
+          dataTransacao: cb.dataTransacao ?? "",
+          dataContestacao: cb.createdAt.toISOString().split("T")[0],
+          numeroPedido: cb.numeroPedido ?? "",
+          nomeCliente: cb.nomeCliente ?? "",
+          cpfCliente: cb.cpfCliente ?? "",
+          emailCliente: cb.emailCliente ?? "",
+          enderecoEntrega: cb.enderecoEntrega ?? "",
+          itensPedido: JSON.parse(cb.itensPedido ?? "[]"),
+          eventosRastreio: JSON.parse(cb.eventosRastreio ?? "[]"),
+          comunicacoes: JSON.parse(cb.comunicacoes ?? "[]"),
+          codigoConfirmacao: cb.chargeId ?? "",
+          codigoRastreio: cb.codigoRastreio ?? "",
+          transportadora: cb.transportadora ?? "",
+          enderecoFaturamento: "",
+          ipComprador: "",
+          nomeEmpresa: "",
+          cnpjEmpresa: "",
+          emailEmpresa: "",
+          telefoneEmpresa: "",
+          enderecoEmpresa: "",
+          politicaReembolsoUrl: "",
+        }
         : undefined,
       defesas: (cb as any).defesas,
     };

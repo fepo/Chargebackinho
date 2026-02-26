@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: openclaw-app
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env.vps
+    environment:
+      # Sobrescreve para usar o banco persistente local
+      - NODE_ENV=production
+      - DATABASE_URL=
+
+  # (Opcional) Caddy como Reverse Proxy para HTTPS automático
+  # Descomente e crie um Caddyfile se for usar um domínio próprio (ex: app.seudominio.com)
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: openclaw-caddy
+  #   restart: always
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   depends_on:
+  #     - app
+
+volumes:
+  caddy_data:
+  caddy_config:
